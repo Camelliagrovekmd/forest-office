@@ -1432,7 +1432,7 @@ const LINKS = [
     { t: '홈페이지', h: 'https://hani1.com', d: 'hani1.com' },
     { t: '네이버 블로그', h: 'https://blog.naver.com/dbshani', d: '건강 칼럼' },
     { t: '인스타그램', h: 'https://www.instagram.com/camellia_grove_kmc/', d: '쇼츠·릴스' },
-    { t: '네이버 지도', h: 'https://map.naver.com/p/entry/place/930065', d: '오시는 길' }
+    { t: '네이버 지도', h: 'https://m.place.naver.com/hospital/19146830/home', d: '오시는 길' }
   ] }
 ];
 // 화이트보드 링크 칸(3×3). 그림은 ../link_icons/<key>.webp (없으면 이모지). h가 비면 '주소 필요'
@@ -1440,7 +1440,7 @@ const LINK_TILES = [
   { k: 'home', t: '홈페이지', e: '🏡', h: 'https://hani1.com' },
   { k: 'blog', t: '네이버 블로그', e: '📗', h: 'https://blog.naver.com/dbshani' },
   { k: 'insta', t: '인스타그램', e: '📷', h: 'https://www.instagram.com/camellia_grove_kmc/' },
-  { k: 'map', t: '오시는 길', e: '🗺', h: 'https://map.naver.com/p/entry/place/930065' }
+  { k: 'map', t: '오시는 길', e: '🗺', h: 'https://m.place.naver.com/hospital/19146830/home' }
 ];
 // 화이트보드(벽) 위 링크 칸: 1672 기준 왼쪽 위(953,194), 폭 136, 기울기 11° (판 아래 받침과 나란히)
 const WBS = +new URLSearchParams(location.search).get('wbs') || 1.2; /* 11/9 원장님: 링크판 1.2배(시험은 ?wbs=1.5 등) */
