@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>동백숲 운영실 젤리 · Camellia-Grove KMC Office Jelly</title>
+<meta name="description" content="동백숲한의원 운영실을 연노랑 푸딩 젤리 한 블록에 담았어요. 바다를 휘젓고, 블록을 흔들고, 동물 직원들을 간지럽혀 보세요.">
+<meta property="og:title" content="동백숲 운영실 젤리">
+<meta property="og:image" content="https://office.hani1.com/camellia-jelly/og.jpg">
+<meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta property="og:description" content="연노랑 푸딩 젤리 한 블록에 담은 동백숲한의원 운영실. 휘젓고, 흔들고, 간지럽혀 보세요.">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT@9..144,100..900,0..100&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css">
+<link rel="stylesheet" href="style.css">
+<script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/" } }</script>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="labels"></div>
+
+<header id="hero">
+  <div class="kicker"><i></i>젤리 사무실 연구 <span>Nº 01</span></div>
+  <h1 id="title" aria-label="Camellia-Grove KMC Office Jelly."></h1>
+  <p class="lede">동백숲 언덕 아래, 연노랑 푸딩 바다를 낀 운영실.<br>부엉이 관제실과 토끼 칼럼팀, 다람쥐 약재실과 곰 탕전실까지<br>푸딩 젤리 한 블록에 담은 동백숲한의원.</p>
+</header>
+
+<div id="chip"><i></i>WebGL · 실시간</div>
+
+<aside id="panel">
+  <div class="ph"><span>동백숲 운영실</span><button id="fold" aria-label="패널 접기">–</button></div>
+  <div class="pbody">
+    <div class="grid5">
+      <button class="act on" data-mode="work">업무 시작</button>
+      <button class="act" data-mode="walk">산책</button>
+      <button class="act" data-mode="selfie">셀카</button>
+      <button class="act" data-mode="tree">트리 꾸미기</button>
+      <button class="act" data-mode="hard" id="hard">열일하기</button>
+    </div>
+    <button id="boss" class="wide">원장님 휴식 <small>소파로 가서 눕기</small></button>
+    <div class="stats"><span>셀카 <b id="st-selfie">0</b>장</span><span>트리 장식 <b id="st-orn">0</b>개</span><span>간지럼 <b id="st-tickle">0</b>번</span></div>
+    <div class="sec">젤리 맛</div>
+    <div class="flavors" id="flavors"></div>
+    <div class="sl"><label>탱탱함 <b id="v-bounce">55</b></label><input type="range" id="bounce" min="0" max="100" value="55"></div>
+    <div class="sl"><label>출렁임 잔잔함 <b id="v-calm">35</b></label><input type="range" id="calm" min="0" max="100" value="35"></div>
+    <div class="sl"><label>물때 <b id="v-tide">보통</b></label><input type="range" id="tide" min="-100" max="100" value="0"></div>
+    <div class="sl"><label>바람 <b id="v-wind">40</b></label><input type="range" id="wind" min="0" max="100" value="40"></div>
+    <div class="sl"><label>눈 <b id="v-snow">35</b></label><input type="range" id="snow" min="0" max="100" value="35"></div>
+    <div class="row5">
+      <button id="reset">초기화</button><button id="pause">멈춤</button><button id="sound">소리 켜기</button><button id="view">시점</button><button id="tags" class="on">이름표</button>
+    </div>
+  </div>
+</aside>
+
+<footer id="how">
+  <div class="kicker2">HOW TO PLAY</div>
+  <p class="big">푸딩을 휘젓고. 블록을 흔들고. 직원들을 간지럽혀요.</p>
+  <p class="small">푸딩 드래그 — 물결 · 바닥이나 단면 드래그 — 젤리 흔들기 · 푸딩 더블클릭 — 모두 깜짝 · 캐릭터 누르기 — 간지럼 · 빈 곳·오른쪽 드래그 — 회전 · 스크롤 — 확대</p>
+</footer>
+<div id="corner">작은 사무실,<br>연노랑 푸딩 바다<small>CAMELLIA GROVE KMC · office.hani1.com</small></div>
+<div id="toast"></div>
+
+<script type="module" src="main.js"></script>
+</body>
+</html>
