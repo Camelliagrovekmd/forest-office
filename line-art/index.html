@@ -1,0 +1,1452 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>동백숲한의원 숲속 사무실 · 선 그림판</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #ebe8e2; }
+  body { display: grid; place-items: center; }
+  .card { width: min(94vw, calc((100vh - 32px) * 16 / 9)); aspect-ratio: 16 / 9; border-radius: 16px; overflow: hidden; background: #fdfcf8;
+          box-shadow: 0 0 0 1px rgba(40, 34, 26, .10), 0 18px 50px -18px rgba(40, 34, 26, .35); }
+  #stage, #stage svg { display: block; width: 100%; height: 100%; }
+  #stage svg .pp { fill: var(--paper, #fdfdfc); }
+</style>
+</head>
+<body>
+  <div class="card"><div id="stage"></div></div>
+  <script>
+(() => { const M = {};
+// ---- ink
+{ const {  } = M;
+// ink.ts — pen, paper and the drawing primitives every line-art figure shares.
+//
+// Conventions
+//  - Draw each figure in its own space: ~95 units tall, feet on y = 120, facing +x,
+//    standing on x = 40. Place it in a scene with `place()`.
+//  - Ink is `currentColor`; paper fills get class "pp". Set `color` and `--paper`
+//    on the <svg> (with `.pp { fill: var(--paper) }` in CSS) to retint everything,
+//    e.g. pale ink on indigo paper at night.
+//  - Create nodes once, then update `d`/attributes each frame. Nothing here allocates DOM per frame.
+
+/** A point produced by the library. */
+                                   
+/** Any point you pass in: a tuple or a plain [x, y] array. */
+                                   
+                                                    
+
+const NS = 'http://www.w3.org/2000/svg';
+const INK = 'currentColor';
+const PAPER = '#fdfdfc';
+const INK_DAY = '#1c1c1c';
+/** Pen width in figure units: ≈1.4 % of a 95-unit figure. */
+const PEN = 1.35;
+
+function el                                      (tag   , attrs        = {}, parent                 )                          {
+  const n = document.createElementNS(NS, tag);
+  for (const k in attrs) n.setAttribute(k, String(attrs[k]));
+  if (attrs.fill === PAPER) n.classList.add('pp');
+  if (parent) parent.appendChild(n);
+  return n;
+}
+const f = (n        )         => n.toFixed(2);
+const pt = (p                   )         => `${f(p[0])} ${f(p[1])}`;
+
+/** Open pen stroke. */
+const pen = (parent         , w = PEN)                 =>
+  el('path', { fill: 'none', stroke: INK, 'stroke-width': w, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, parent);
+
+/** Closed outline filled with paper — hides what is behind it (coats, heads, walls, roofs). */
+const shape = (parent         , w = PEN)                 =>
+  el('path', { fill: PAPER, stroke: INK, 'stroke-width': w, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }, parent);
+
+/** Solid ink: shoes, hair, feet, small dark details. */
+const blot = (parent         )                 => el('path', { fill: INK }, parent);
+
+/** Closed outline with a flat colour fill (clothes, props). Re-set `fill` per frame if it should darken at night. */
+const paint = (parent         , colour        , w = PEN)                 =>
+  el('path', { fill: colour, stroke: INK, 'stroke-width': w, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }, parent);
+
+                       
+                 
+                                                                                                              
+                                                                        
+ 
+
+/**
+ * A limb drawn as two separate pen lines either side of a soft curve through the
+ * joints, open at the ends, paper between them. This open double stroke is the
+ * single most recognisable trait of the style — never draw limbs as closed tubes.
+ */
+function limb(parent         , width        , w = PEN)       {
+  const g = el('g', {}, parent);
+  const fill = el('path', { fill: PAPER }, g);
+  const a = pen(g, w), b = pen(g, w);
+  const half = (width - w) / 2;
+  return {
+    g,
+    draw(joints, endGap = [0.4, 0.9]) {
+      const s = joints[0], e = joints[joints.length - 1];
+      let c      = [(s[0] + e[0]) / 2, (s[1] + e[1]) / 2];
+      if (joints.length === 3) { const m = joints[1]; c = [m[0] + 0.55 * (m[0] - c[0]), m[1] + 0.55 * (m[1] - c[1])]; }
+      const P        = [];
+      for (let i = 0; i <= 16; i++) {
+        const t = i / 16, u = 1 - t;
+        P.push([u * u * s[0] + 2 * u * t * c[0] + t * t * e[0], u * u * s[1] + 2 * u * t * c[1] + t * t * e[1]]);
+      }
+      const side = (sgn        )        => P.map((p, i) => {
+        const q = P[Math.min(P.length - 1, i + 1)], o = P[Math.max(0, i - 1)];
+        const dx = q[0] - o[0], dy = q[1] - o[1], l = Math.hypot(dx, dy) || 1;
+        return [p[0] - (dy / l) * half * sgn, p[1] + (dx / l) * half * sgn];
+      });
+      const L = side(1), R = side(-1);
+      fill.setAttribute('d', 'M' + L.map(pt).join('L') + 'L' + R.slice().reverse().map(pt).join('L') + 'Z');
+      const cut = (arr       , gap        ) => arr.slice(0, arr.length - Math.round(gap * 2));
+      a.setAttribute('d', 'M' + cut(L, endGap[0]).map(pt).join('L'));
+      b.setAttribute('d', 'M' + cut(R, endGap[1]).map(pt).join('L'));
+    },
+  };
+}
+
+/** Give a limb a solid fill (black trousers, sleeves). Drops the paper class so CSS can't override it. */
+function solid(l      , colour = INK)       {
+  const n = l.g.querySelector('path');
+  if (n) { n.classList.remove('pp'); n.setAttribute('fill', colour); }
+  return l;
+}
+
+/** Two-bone IK. bend = +1 puts the middle joint toward +x (knees), -1 toward -x. */
+function joint(a    , b    , l1        , l2        , bend         = 1)      {
+  const dx = b[0] - a[0], dy = b[1] - a[1];
+  const d = Math.min(Math.hypot(dx, dy), l1 + l2 - 0.01);
+  const th = Math.atan2(dy, dx);
+  const al = Math.acos(Math.max(-1, Math.min(1, (l1 * l1 + d * d - l2 * l2) / (2 * l1 * d))));
+  const c1      = [a[0] + l1 * Math.cos(th - al), a[1] + l1 * Math.sin(th - al)];
+  const c2      = [a[0] + l1 * Math.cos(th + al), a[1] + l1 * Math.sin(th + al)];
+  return (c1[0] - c2[0]) * bend > 0 ? c1 : c2;
+}
+
+/** Point `len` away at `deg` from straight down (forward = positive). */
+const hang = (from    , len        , deg        )      => {
+  const r = (deg * Math.PI) / 180;
+  return [from[0] + len * Math.sin(r), from[1] + len * Math.cos(r)];
+};
+
+/** Periodic Catmull-Rom through [time, value] keys — the place for keyed or measured poses. */
+function curve(keys               , period        )                        {
+  return (x) => {
+    x = ((x % period) + period) % period;
+    const n = keys.length;
+    let i = n - 1;
+    for (let j = 0; j < n; j++) if (keys[j][0] <= x) i = j;
+    const k = (j        )      => { const w = Math.floor(j / n); const e = keys[((j % n) + n) % n]; return [e[0] + w * period, e[1]]; };
+    const p0 = k(i - 1), p1 = k(i), p2 = k(i + 1), p3 = k(i + 2);
+    const span = p2[0] - p1[0];
+    const u = (x - p1[0]) / span;
+    const m1 = ((p2[1] - p0[1]) / (p2[0] - p0[0])) * span;
+    const m2 = ((p3[1] - p1[1]) / (p3[0] - p1[0])) * span;
+    const u2 = u * u, u3 = u2 * u;
+    return (2 * u3 - 3 * u2 + 1) * p1[1] + (u3 - 2 * u2 + u) * m1 + (-2 * u3 + 3 * u2) * p2[1] + (u3 - u2) * m2;
+  };
+}
+
+/** Shoe: a fat ink wedge at the ankle, pitched by `toe` degrees (toe down positive). */
+function shoe(node                , ankle    , toe = 0)       {
+  const r = (toe * Math.PI) / 180, c = Math.cos(r), s = Math.sin(r);
+  const S = (x        , y        )      => [ankle[0] + x * c - y * s, ankle[1] + x * s + y * c];
+  node.setAttribute('d', `M${pt(S(-1.6, -0.6))} L${pt(S(4.6, -0.2))} Q${pt(S(6.6, 0.4))} ${pt(S(5.6, 1.6))} L${pt(S(-1.4, 1.5))} Q${pt(S(-2.2, 0.5))} ${pt(S(-1.6, -0.6))}Z`);
+}
+
+/** Place a figure group: its local (40, 120) lands on scene (x, y); dir ±1 mirrors it; s scales it. */
+const place = (g             , x        , y        , dir         = 1, s = 0.5)       =>
+  g.setAttribute('transform', `translate(${f(x)} ${f(y)}) scale(${f(dir * s)} ${f(s)}) translate(-40 -120)`);
+
+/** Scene coordinates of a figure-local point (for glows or effects drawn outside the figure). */
+const toScene = (x        , y        , dir        , lx        , ly        , s = 0.5)      => [x + dir * s * (lx - 40), y + s * (ly - 120)];
+
+                                                                                  
+
+/** Wobble filter (so lines read as ink, not vector) and a stripe hatch for striped clothes. */
+function inkDefs(svg               , id = 'ink')          {
+  if (!svg.style.color) svg.style.color = INK_DAY;
+  const defs = el('defs', {}, svg);
+  const flt = el('filter', { id: `${id}-edge`, x: '-2%', y: '-2%', width: '104%', height: '104%' }, defs);
+  el('feTurbulence', { type: 'fractalNoise', baseFrequency: '0.6', numOctaves: 1, seed: 7, result: 'n' }, flt);
+  el('feDisplacementMap', { in: 'SourceGraphic', in2: 'n', scale: 0.45, xChannelSelector: 'R', yChannelSelector: 'G', result: 'd' }, flt);
+  el('feGaussianBlur', { in: 'd', stdDeviation: 0.12 }, flt);
+  const stripes = el('pattern', { id: `${id}-stripes`, width: 4, height: 2.2, patternUnits: 'userSpaceOnUse', patternTransform: 'rotate(-12)' }, defs);
+  el('rect', { width: 4, height: 2.2, fill: PAPER }, stripes);
+  el('rect', { width: 4, height: 1.0, fill: INK }, stripes);
+  return { defs, filter: `url(#${id}-edge)`, stripes: `url(#${id}-stripes)` };
+}
+
+                                                                             
+
+/**
+ * Animation loop calling draw(t, dt) with t and dt in seconds.
+ *  ?t=1.25  freeze at a time (check a pose)
+ *  ?debug   no rAF; exposes window.__step(seconds) to advance in exact 1/60 s steps —
+ *           for headless checks and frame capture (background tabs throttle rAF)
+ */
+function run(draw                                 )             {
+  const q = new URLSearchParams(location.search);
+  if (q.has('debug')) {
+    let t = 0;
+    draw(t, 1 / 60);
+    window.__step = (s = 1) => { for (let i = 0, n = Math.round(s * 60); i < n; i++) draw((t += 1 / 60), 1 / 60); return t; };
+    return () => {};
+  }
+  const frozen = q.has('t') ? Number(q.get('t')) : null;
+  const still = frozen !== null || matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const t0 = performance.now();
+  let id = 0, prev = 0;
+  const tick = (now        ) => {
+    const t = frozen ?? (now - t0) / 1000;
+    draw(t, Math.min(0.05, t - prev)); prev = t;
+    if (!still) id = requestAnimationFrame(tick);
+  };
+  id = requestAnimationFrame(tick);
+  return () => cancelAnimationFrame(id);
+}
+
+
+Object.assign(M, { NS, INK, PAPER, INK_DAY, PEN, el, f, pt, pen, shape, blot, paint, limb, solid, joint, hang, curve, shoe, place, toScene, inkDefs, run }); }
+// ---- motion
+{ const {  } = M;
+// motion.ts — the small physics that make things feel alive without looking procedural.
+
+const clamp = (x        , a        , b        )         => Math.max(a, Math.min(b, x));
+const lerp = (a        , b        , t        )         => a + (b - a) * t;
+const smooth = (e0        , e1        , x        )         => { const t = clamp((x - e0) / (e1 - e0), 0, 1); return t * t * (3 - 2 * t); };
+const ease = (t        )         => smooth(0, 1, t);
+const minJerk = (s        )         => s * s * s * (10 - 15 * s + 6 * s * s);
+const rnd = (a        , b        )         => a + Math.random() * (b - a);
+
+/** Seeded random for static drawing, so a scene looks the same on every load. */
+function seeded(seed = 11)                                     {
+  let s = seed;
+  return (a = 0, b = 1) => { s = (s * 16807) % 2147483647; return a + ((s - 1) / 2147483646) * (b - a); };
+}
+
+/** Layered sines: organic drift for idle motion that doesn't read as a loop. */
+const wobble = (t        , k = 1)         => Math.sin(t * 1.3 * k) * 0.6 + Math.sin(t * 2.7 * k + 1.7) * 0.3 + Math.sin(t * 5.1 * k + 4.1) * 0.1;
+
+                                                                                                                 
+
+/**
+ * Damped spring toward a moving target. Use for anything attached to a moving body:
+ * sleeves, bags, ears, a parasol's tilt, arms swinging opposite the legs.
+ */
+function spring(stiffness = 40, damping = 6, x = 0)         {
+  return {
+    x, v: 0,
+    step(target, dt) { this.v += (stiffness * (target - this.x) - damping * this.v) * dt; this.x += this.v * dt; return this.x; },
+    kick(v) { this.v += v; },
+  };
+}
+
+                                                                                                                  
+
+/**
+ * Pendulum (angle in radians) for hanging things: lanterns, curtains, chimes, signs, a briefcase.
+ * `force` is this frame's push — wind, the carrier's acceleration, a click.
+ */
+function pendulum(stiffness = 10, damping = 1.1, a = 0)           {
+  return {
+    a, v: 0,
+    step(force, dt) { this.v += (-this.a * stiffness + force - this.v * damping) * dt; this.a += this.v * dt; return this.a; },
+    kick(v) { this.v += v; },
+  };
+}
+
+                                                                
+
+/** Wind from pointer movement plus a slow breeze; `value` ≈ -2.4…2.4. A quick sideways swipe gusts it. */
+function pointerWind(target             , base = 0.3)       {
+  let aim = base, lastX                = null, lastT = 0;
+  const w       = {
+    value: base,
+    step(t) {
+      aim = lerp(aim, base + 0.25 * Math.sin(t * 0.21) + 0.15 * Math.sin(t * 0.67), 0.012);
+      w.value = lerp(w.value, aim, 0.05);
+      return w.value;
+    },
+  };
+  target.addEventListener('pointermove', (e) => {
+    const { clientX } = e                ;
+    const now = performance.now();
+    if (lastX !== null) aim = clamp(aim + ((clientX - lastX) / Math.max(8, now - lastT)) * 0.8, -2.4, 2.4);
+    lastX = clientX; lastT = now;
+  });
+  return w;
+}
+
+                                                                     
+
+/** A timed sequence of named poses for an interaction (sleep → sit → stretch …). Returns null when finished. */
+function sequence(steps                                        )                                     {
+  const total = steps.reduce((a, s) => a + s[1], 0);
+  return (t) => {
+    if (t < 0 || t >= total) return null;
+    let acc = 0, prev = steps[0][0];
+    for (const [name, d] of steps) { if (t < acc + d) return { from: prev, to: name, u: (t - acc) / d }; acc += d; prev = name; }
+    return null;
+  };
+}
+
+
+Object.assign(M, { clamp, lerp, smooth, ease, minJerk, rnd, seeded, wobble, spring, pendulum, pointerWind, sequence }); }
+// ---- daynight
+{ const {  } = M;
+// daynight.ts — time-of-day palette for line-art scenes.
+// τ ∈ [0,1): 0 midnight · 0.25 dawn · 0.5 noon · 0.75 dusk.
+//
+// Day is dark ink on warm paper. Night inverts it: pale ink on indigo paper, with
+// warm light from windows and lanterns. The ink flips while the paper is mid-dark,
+// so the low-contrast moment lasts about a second of a three-minute day.
+
+                                           
+                                              
+
+const toRGB = (h        )      => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16))       ;
+const rgb = (c     )         => `rgb(${c.map((v) => Math.round(v)).join(',')})`;
+const mix = (a     , b     , t        )      => a.map((v, i) => v + (b[i] - v) * t)       ;
+const lum = (c     ) => (0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]) / 255;
+const smooth = (e0        , e1        , x        ) => { const t = Math.max(0, Math.min(1, (x - e0) / (e1 - e0))); return t * t * (3 - 2 * t); };
+
+/** Sample a cyclic colour ramp at u ∈ [0,1). */
+function ramp(keys      , u        )      {
+  u = ((u % 1) + 1) % 1;
+  const n = keys.length;
+  let i = n - 1;
+  for (let j = 0; j < n; j++) if (keys[j][0] <= u) i = j;
+  const [p0, c0] = keys[i], [p1, c1] = keys[(i + 1) % n];
+  const span = (i + 1 < n ? p1 : p1 + 1) - p0;
+  let x = u - p0; if (x < 0) x += 1;
+  return mix(toRGB(c0), toRGB(c1), smooth(0, 1, x / span));
+}
+
+const SKY_TOP       = [[0, '#0d1222'], [0.19, '#131a30'], [0.235, '#3d4066'], [0.27, '#cfd8e2'], [0.33, '#f3f2ee'], [0.5, '#f6f5f1'], [0.68, '#f3eee4'], [0.735, '#e3c6a6'], [0.762, '#5a5279'], [0.8, '#1b2140'], [0.86, '#0d1222']];
+const SKY_BOTTOM       = [[0, '#1a2240'], [0.19, '#283050'], [0.235, '#d49884'], [0.27, '#f3d0b3'], [0.33, '#faf6ee'], [0.5, '#fcfbf7'], [0.68, '#f9efdc'], [0.735, '#f0a379'], [0.762, '#d47f68'], [0.8, '#383a60'], [0.86, '#1a2240']];
+const PAPERS       = [[0, '#1a2036'], [0.19, '#1f263e'], [0.235, '#4a4561'], [0.27, '#ede4d8'], [0.33, '#fbf8f1'], [0.5, '#fdfcf8'], [0.68, '#faf4e8'], [0.735, '#f0dbc4'], [0.756, '#5d5571'], [0.8, '#262c48'], [0.86, '#1a2036']];
+const INK_DARK = toRGB('#1c1c1c'), INK_LIGHT = toRGB('#efe6cf');
+
+                          
+                                              
+                                                                       
+               
+                                                                                             
+               
+                                     
+                
+                                                 
+                 
+ 
+
+function palette(tau        )          {
+  const top = ramp(SKY_TOP, tau), bottom = ramp(SKY_BOTTOM, tau), paper = ramp(PAPERS, tau);
+  const L = lum(paper);
+  const inkT = smooth(0.56, 0.36, L);
+  return {
+    top, bottom, paper, inkT,
+    ink: mix(INK_DARK, INK_LIGHT, inkT),
+    lamp: smooth(0.78, 0.4, L),
+    night: smooth(0.42, 0.1, lum(top)),
+    sunset: Math.max(smooth(0.67, 0.735, tau) * smooth(0.79, 0.745, tau), smooth(0.215, 0.245, tau) * smooth(0.3, 0.26, tau)),
+  };
+}
+
+/** Apply a palette to an <svg> drawn with ink.ts (needs `.pp { fill: var(--paper) }` in CSS). */
+function applyPalette(svg               , P         )       {
+  svg.style.color = rgb(P.ink);
+  svg.style.setProperty('--paper', rgb(P.paper));
+}
+
+/** Darken a flat colour (clothes, props) toward night so it sits in the inverted palette. */
+const nightTint = (colour        , P         , amount = 0.55)         =>
+  rgb(mix(toRGB(colour), mix(toRGB(colour), [12, 16, 30], 0.6), P.inkT * amount));
+
+
+Object.assign(M, { toRGB, rgb, mix, ramp, SKY_TOP, SKY_BOTTOM, PAPERS, palette, applyPalette, nightTint }); }
+// ---- gait
+{ const {  } = M;
+// gait.ts — walk and run solvers for a figure drawn in ink.ts figure space
+// (feet on y = 120, facing +x, hip above x = 40).
+//
+// A believable gait comes from four rules, all built in here:
+//  1. The planted foot slides back at exactly the travel speed (`speed`), so it
+//     stays still on the ground while the figure moves by `speed`.
+//  2. The swinging foot follows a minimum-jerk path: low for walking, with a heel
+//     kick for running.
+//  3. The heel peels off before the swing: the foot pivots on its toe.
+//  4. Hip height comes from what the planted legs can reach, so a walker rises over
+//     each step and dips when both feet are down. A runner compresses over the
+//     planted foot and is highest in flight. No sine bobbing.
+//
+//   const walk = gait({ kind: 'walk' });
+//   phase += dt / walk.period;  x += dir * walk.speed * scale * dt;
+//   const p = walk.pose(phase);  // hip, feet[0..1] { ankle, knee, pitch, stance }, front, bob
+
+                                    
+
+                                                  
+
+                              
+                  
+                                               
+                  
+                                                                             
+                
+                                                                      
+                  
+                                         
+                
+                                                                 
+                   
+                                                                                         
+                    
+                 
+                
+                                                                                                  
+                  
+                  
+                                                                       
+               
+ 
+
+                                                                               
+                                                                                 
+                                                     
+                                                                                 
+                
+                                                                                                    
+                                         
+ 
+
+const clamp = (x        , a        , b        ) => Math.max(a, Math.min(b, x));
+const smooth = (e0        , e1        , x        ) => { const t = clamp((x - e0) / (e1 - e0), 0, 1); return t * t * (3 - 2 * t); };
+const minJerk = (s        ) => s * s * s * (10 - 15 * s + 6 * s * s);
+
+function knee(hip     , ankle     , l1        , l2        )      {
+  const dx = ankle[0] - hip[0], dy = ankle[1] - hip[1];
+  const d = Math.min(Math.hypot(dx, dy), l1 + l2 - 0.01);
+  const th = Math.atan2(dy, dx);
+  const al = Math.acos(clamp((l1 * l1 + d * d - l2 * l2) / (2 * l1 * d), -1, 1));
+  const c1      = [hip[0] + l1 * Math.cos(th - al), hip[1] + l1 * Math.sin(th - al)];
+  const c2      = [hip[0] + l1 * Math.cos(th + al), hip[1] + l1 * Math.sin(th + al)];
+  return c1[0] > c2[0] ? c1 : c2; // knees bend forward
+}
+
+const GAIT_PRESETS                                                        = {
+  // natural adult walk, ~2 steps/s
+  walk: { period: 1.0, duty: 0.62, stride: 24, lift: 3.4, heelOff: 15, heelKick: 0, thigh: 23, shin: 23, ankleY: 118.4, ground: 120, toe: 4.2 },
+  // kimono, tight skirt, geta: shorter stride, very low lift
+  shuffle: { period: 0.9, duty: 0.64, stride: 18, lift: 2.4, heelOff: 12, heelKick: 0, thigh: 23, shin: 23, ankleY: 116, ground: 120, toe: 4.2 },
+  // child's or adult's run: short ground contact, flight phase, heel kick
+  run: { period: 0.5, duty: 0.36, stride: 16, lift: 12, heelOff: 10, heelKick: 3.5, thigh: 13, shin: 13, ankleY: 118, ground: 120, toe: 3 },
+};
+
+function gait(opts              = {})       {
+  const kind = opts.kind ?? 'walk';
+  const o = { ...GAIT_PRESETS[kind], ...opts, kind };
+  const { period, duty, stride: S, lift, heelOff, heelKick, thigh, shin, ankleY, ground, toe } = o;
+  const reach = (thigh + shin) * 0.983; // a planted leg is nearly, not perfectly, straight
+  const restHip = ankleY - reach;
+  const speed = S / (duty * period);
+
+  const foot = (u        )                     => {
+    u = ((u % 1) + 1) % 1;
+    if (u < duty) {
+      const x = 40 + S / 2 - (S * u) / duty;
+      const peel = smooth(duty - 0.14, duty, u);
+      const th = (heelOff * peel * Math.PI) / 180;
+      const px = x + toe, py = ground, ox = -toe, oy = ankleY - ground; // pivot on the toe, on the ground
+      return { ankle: [px + ox * Math.cos(th) - oy * Math.sin(th), py + ox * Math.sin(th) + oy * Math.cos(th)], pitch: heelOff * peel, stance: true };
+    }
+    const s = (u - duty) / (1 - duty);
+    const x = 40 - S / 2 + S * minJerk(s) - heelKick * Math.sin(Math.PI * Math.min(1, s * 1.6));
+    const y = ankleY - lift * Math.pow(Math.sin(Math.PI * Math.pow(s, heelKick ? 0.7 : 1)), 1.2);
+    return { ankle: [x, y], pitch: heelOff * Math.pow(1 - smooth(0, 0.55, s), 1.4), stance: false };
+  };
+
+  return {
+    ...o,
+    speed,
+    pose(phase, go = 1) {
+      const raw = [foot(phase), foot(phase + 0.5)];
+      if (go < 1) raw.forEach((fo, i) => {
+        const rest = 40 + (i ? -2 : 2);
+        fo.ankle = [rest + (fo.ankle[0] - rest) * go, ankleY + (fo.ankle[1] - ankleY) * go];
+        fo.pitch *= go; fo.stance = true;
+      });
+      let hipY = restHip;
+      const half = (((phase % 0.5) + 0.5) % 0.5);
+      if (heelKick && go >= 1) {
+        // run: compress over the planted foot, highest mid-flight
+        hipY = half < duty ? restHip + 1.4 * Math.sin((Math.PI * half) / duty) : restHip - 2.6 * Math.sin((Math.PI * (half - duty)) / (0.5 - duty));
+      } else {
+        // walk: lowest at double support, highest as the legs pass
+        for (const fo of raw) if (fo.stance) {
+          const dx = fo.ankle[0] - 40;
+          hipY = Math.max(hipY, fo.ankle[1] - Math.sqrt(Math.max(1, reach * reach - dx * dx)));
+        }
+      }
+      const hip      = [40, hipY];
+      const feet = raw.map((fo) => ({ ...fo, knee: knee(hip, fo.ankle, thigh, shin) }))                ;
+      const front        = feet[0].ankle[0] >= feet[1].ankle[0] ? 0 : 1;
+      return { hip, feet, front, bob: hipY - restHip };
+    },
+  };
+}
+
+
+Object.assign(M, { GAIT_PRESETS, gait }); }
+// ---- forest
+{ const { el, pen, shape, blot, paint, limb, solid, shoe, inkDefs, run, f, pt, PEN, PAPER, gait, spring, pendulum, pointerWind, ease, clamp, lerp, seeded, palette, applyPalette, nightTint, rgb } = M;
+// 동백숲한의원 숲속 사무실 — 선 그림판 (line-art-animation 스킬)
+// 지금 운영실(office.hani1.com)의 구도를 등각(아이소메트릭)으로 옮겼다.
+// 왼쪽 창: 눈 덮인 동백숲, 안쪽 벽: 약장과 트리, 오른쪽 창: 바다와 산, 오른쪽: 촬영 코너,
+// 왼쪽 아래: 라운지 소파, 앞쪽: 가랜드 난간. 직원 9명 + 원장님 + 부엉이(총괄),
+// 아기 부엉이와 아기 토끼가 낮에 놀고, 하루가 아침→낮→저녁→밤으로 돈다.
+const W = 960, H = 540, LOOP = 120, S = 0.95;
+const KX = 0.7416, KY = 0.2997, TS = KY / KX; // 22도 등각
+const CX = 480, CY = 158;
+const P = (u        , v        , h = 0)      => [CX + (u - v) * KX, CY + (u + v) * KY - h];
+const poly = (pts       ) => 'M' + pts.map(pt).join(' L') + 'Z';
+
+const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': '선으로 그린 동백숲한의원 숲속 사무실의 하루' });
+const { filter, defs } = inkDefs(svg, 'o');
+document.querySelector('#stage') .appendChild(svg);
+
+// ---------- 시간
+const TK        = [[0, 0.22], [8, 0.27], [24, 0.36], [62, 0.6], [74, 0.72], [84, 0.79], [98, 0.88], [120, 1.22]];
+const tauAt = (t        )         => {
+  for (let i = 0; i < TK.length - 1; i++) if (t <= TK[i + 1][0]) { const u = (t - TK[i][0]) / (TK[i + 1][0] - TK[i][0]); return (TK[i][1] + (TK[i + 1][1] - TK[i][1]) * u) % 1; }
+  return TK[0][1];
+};
+
+// ---------- 색 등록 (밤이면 함께 어두워짐)
+const tinted                                      = [];
+const tint =                       (e   , col        , attr = 'fill')    => { tinted.push([e, col, attr]); e.setAttribute(attr, col); return e; };
+const colour = (g         , col        , w = PEN) => tint(paint(g, col, w), col);
+
+// ---------- 층
+const winLayer = el('g', {}, svg);
+const scene = el('g', { filter }, svg);
+const roomG = el('g', {}, scene);
+const world = el('g', {}, scene);
+const air = el('g', {}, scene);
+const frontG = el('g', {}, scene);
+const glowG = el('g', { style: 'mix-blend-mode:screen;pointer-events:none' }, svg);
+const hud = el('g', {}, svg);
+
+// ---------- 등각 도형
+function quad(g         , pts       , col = PAPER, w = 1)                 {
+  const p = col === PAPER ? shape(g, w) : colour(g, col, w);
+  p.setAttribute('d', poly(pts)); return p;
+}
+function box(g         , u0        , v0        , u1        , v1        , h0        , h1        , col = PAPER, w = 1)              {
+  const b = el('g', {}, g);
+  quad(b, [P(u1, v0, h0), P(u1, v1, h0), P(u1, v1, h1), P(u1, v0, h1)], col, w);
+  quad(b, [P(u0, v1, h0), P(u1, v1, h0), P(u1, v1, h1), P(u0, v1, h1)], col, w);
+  quad(b, [P(u0, v0, h1), P(u1, v0, h1), P(u1, v1, h1), P(u0, v1, h1)], col, w);
+  return b;
+}
+const line = (g         , a     , b     , w = 1) => { const p = pen(g, w); p.setAttribute('d', `M${pt(a)} L${pt(b)}`); return p; };
+// 벽·책상 앞면 위 글씨: 오른쪽 벽/+v 면은 (KX,KY), 왼쪽 벽은 (KX,-KY)
+const surfText = (g         , at     , txt        , size        , dir        , attrs                                  = {}) => {
+  const tx = el('text', { transform: `matrix(${KX * 1.25},${dir * KY * 1.25},0,1,${f(at[0])},${f(at[1])})`, 'font-size': size, 'font-family': '"Noto Sans KR",sans-serif', fill: 'currentColor', 'text-anchor': 'middle', ...attrs }, g);
+  tx.textContent = txt; return tx;
+};
+
+// ---------- 깊이 정렬되는 물건들
+                                              
+const items         = [];
+const item = (key        )              => { const g = el('g', {}, world); items.push({ g, key }); return g; };
+
+// ---------- 창 (밖 풍경은 벽 뒤 층에, 창 모양으로 잘라서)
+const LW = { v0: 70, v1: 800, h0: 30, h1: 640 };
+const RW = { u0: 300, u1: 820, h0: 110, h1: 640 };
+const leftWin        = [P(0, LW.v0, LW.h0), P(0, LW.v1, LW.h0), P(0, LW.v1, LW.h1), P(0, LW.v0, LW.h1)];
+const rightWin        = [P(RW.u0, 0, RW.h0), P(RW.u1, 0, RW.h0), P(RW.u1, 0, RW.h1), P(RW.u0, 0, RW.h1)];
+const clip = (id        , pts       ) => { const c = el('clipPath', { id }, defs); el('path', { d: poly(pts) }, c); return `url(#${id})`; };
+const grad = el('linearGradient', { id: 'skyg', x1: 0, y1: 0, x2: 0, y2: 360, gradientUnits: 'userSpaceOnUse' }, defs);
+const gTop = el('stop', { offset: 0 }, grad), gBot = el('stop', { offset: 1 }, grad);
+
+// 왼쪽 창: 눈 덮인 동백숲
+const forest = el('g', { 'clip-path': clip('lw', leftWin) }, winLayer);
+el('rect', { x: -120, y: -10, width: 620, height: 400, fill: 'url(#skyg)' }, forest);
+const forestInk = el('g', { filter }, forest);
+const rf = seeded(21);
+const blossoms               = [];
+for (let row = 0; row < 3; row++) {
+  const yb = 150 + row * 70, n = 10 - row, green = ['#a9bf98', '#7f9e6c', '#5d7f4d'][row];
+  for (let i = 0; i < n; i++) {
+    const x = -100 + (i + rf(-0.2, 0.3)) * (580 / n) + row * 18, w = rf(46, 64) + row * 6, hgt = rf(70, 100) + row * 10;
+    line(forestInk, [x, yb + 40], [x + rf(-3, 3), yb - hgt * 0.35], 1.1);
+    let d = `M${f(x - w / 2)} ${f(yb)}`;
+    const k = 6;
+    for (let j = 0; j <= k; j++) { const a = Math.PI * (1 - j / k); d += ` Q${f(x + Math.cos(a + 0.25) * w * 0.62)} ${f(yb - hgt * 0.55 - Math.sin(a + 0.25) * hgt * 0.55)} ${f(x + Math.cos(a) * w / 2)} ${f(yb - hgt * 0.45 - Math.sin(a) * hgt * 0.5)}`; }
+    const can = colour(forestInk, green, 0.9); can.setAttribute('d', d + ` Q${f(x)} ${f(yb + 8)} ${f(x - w / 2)} ${f(yb)}Z`);
+    const cap = tint(pen(forestInk, 2.2), '#f4f6f8', 'stroke'); cap.setAttribute('d', `M${f(x - w * 0.32)} ${f(yb - hgt * 0.86)} Q${f(x)} ${f(yb - hgt * 1.02)} ${f(x + w * 0.3)} ${f(yb - hgt * 0.84)}`);
+    if (row > 0) for (let b = 0; b < 3 + row * 2; b++) {
+      const bx = x + rf(-w * 0.4, w * 0.4), by = yb - rf(hgt * 0.2, hgt * 0.8);
+      blossoms.push(tint(el('circle', { cx: f(bx), cy: f(by), r: f(2 + row * 0.6), stroke: 'currentColor', 'stroke-width': 0.5 }, forestInk), '#c8323f'));
+    }
+  }
+}
+colour(forestInk, '#eef1f4', 0.8).setAttribute('d', 'M-120 330 Q140 316 500 340 L500 400 L-120 400Z');
+// 오른쪽 창: 바다와 산
+const sea = el('g', { 'clip-path': clip('rw', rightWin) }, winLayer);
+el('rect', { x: 600, y: -10, width: 480, height: 400, fill: 'url(#skyg)' }, sea);
+const sun = el('circle', { r: 11, fill: '#f6cf73' }, sea);
+const moon = el('path', { fill: '#f3e9c8' }, sea);
+const stars = Array.from({ length: 22 }, (_, i) => el('circle', { cx: f(640 + ((i * 97) % 400)), cy: f(10 + ((i * 53) % 110)), r: 0.8, fill: '#f6f0dc' }, sea));
+const seaInk = el('g', { filter }, sea);
+const HZ = 128;
+const mountains = [['#b9c7cf', 0.6, 96], ['#97a9b5', 0.8, 108], ['#7d8f9b', 1, 118]]         ;
+mountains.forEach(([c, w, base], i) => {
+  const r = seeded(40 + i); let d = `M600 ${HZ}`; let x = 600;
+  while (x < 1080) { const s = r(30, 70); d += ` Q${f(x + s * 0.5)} ${f(base - r(10, 40) + i * 6)} ${f(x + s)} ${f(base + r(-4, 6))}`; x += s; }
+  const m = colour(seaInk, c, w); m.setAttribute('d', d + ` L1080 ${HZ} Z`);
+});
+const water = colour(seaInk, '#a8c2cf', 0.8); water.setAttribute('d', `M600 ${HZ} L1080 ${HZ} L1080 400 L600 400Z`);
+const glitter = el('g', {}, sea);
+const waves = Array.from({ length: 16 }, (_, i) => { const p = pen(seaInk, 0.6); p.setAttribute('opacity', '0.55'); return { p, x: 620 + ((i * 131) % 420), y: HZ + 12 + ((i * 37) % 200), w: 10 + (i % 4) * 5 }; });
+// 섬과 등대
+const isle = (x        , y        , w        , hgt        ) => { const s = colour(seaInk, '#7f9470', 0.9); s.setAttribute('d', `M${x - w} ${y} Q${x - w * 0.4} ${y - hgt} ${x} ${y - hgt * 0.9} Q${x + w * 0.5} ${y - hgt * 0.8} ${x + w} ${y}Z`); };
+isle(760, 170, 40, 16); isle(900, 150, 26, 10); isle(990, 200, 50, 22);
+const lh = el('g', {}, seaInk);
+quad(lh, [[982, 180], [988, 180], [987, 158], [983, 158]]);
+line(lh, [981, 166], [989, 166], 1.6);
+const lhLamp = el('circle', { cx: 985, cy: 156, r: 2, fill: '#f6cf73' }, sea);
+// 배
+const boat = el('g', {}, seaInk);
+shape(boat, 0.9).setAttribute('d', 'M-10 0 L10 0 L7 4 L-7 4Z');
+shape(boat, 0.8).setAttribute('d', 'M0 -1 L0 -18 L9 -2Z');
+// 갈매기
+const gulls = Array.from({ length: 3 }, () => pen(seaInk, 0.8));
+// 눈
+const snow = [forest, sea].map((g, k) => Array.from({ length: 26 }, (_, i) => ({ c: el('circle', { r: f(0.9 + (i % 3) * 0.5), fill: '#ffffff', stroke: '#9aa7b3', 'stroke-width': 0.3 }, g), x: (k ? 620 : -110) + ((i * 71) % 420), y0: (i * 53) % 380, sp: 10 + (i % 5) * 3 })));
+
+// ---------- 방 (바닥과 벽: 창 자리는 비움)
+const floorEl = shape(roomG, 0.9); floorEl.setAttribute('d', poly([P(0, 0), P(1500, 0), P(1500, 1500), P(0, 1500)]));
+pen(roomG, 0.5).setAttribute('d', Array.from({ length: 26 }, (_, i) => `M${pt(P(0, 20 + i * 34))} L${pt(P(900, 20 + i * 34))}`).join(' ') + Array.from({ length: 60 }, (_, i) => { const v = 20 + (i % 26) * 34, u = 30 + ((i * 137) % 860); return ` M${pt(P(u, v))} L${pt(P(u, v + 34))}`; }).join(''));
+(roomG.lastChild              ).setAttribute('opacity', '0.28');
+const wallL = el('path', { d: poly([P(0, 0, 0), P(0, 900, 0), P(0, 900, 700), P(0, 0, 700)]) + ' ' + poly(leftWin), 'fill-rule': 'evenodd', fill: PAPER, stroke: 'currentColor', 'stroke-width': 1 }, roomG);
+const wallR = el('path', { d: poly([P(0, 0, 0), P(900, 0, 0), P(900, 0, 700), P(0, 0, 700)]) + ' ' + poly(rightWin), 'fill-rule': 'evenodd', fill: PAPER, stroke: 'currentColor', 'stroke-width': 1 }, roomG);
+void wallL; void wallR;
+line(roomG, P(0, 0, 0), P(0, 0, 400), 1.2);
+// 걸레받이
+pen(roomG, 0.8).setAttribute('d', `M${pt(P(0, 900, 6))} L${pt(P(0, 0, 6))} L${pt(P(900, 0, 6))}`);
+// 창틀
+const frames = el('g', {}, roomG);
+for (let v = LW.v0; v <= LW.v1; v += 92) line(frames, P(0, v, LW.h0), P(0, v, 640), v === LW.v0 ? 2.4 : 1.6);
+for (const hh of [LW.h0, LW.h0 - 5, 200]) line(frames, P(0, LW.v0, hh), P(0, LW.v1, hh), hh === 200 ? 1.2 : 1.6);
+for (let u = RW.u0; u <= RW.u1; u += 100) line(frames, P(u, 0, RW.h0), P(u, 0, 640), u === RW.u0 ? 2.4 : 1.6);
+for (const hh of [RW.h0, RW.h0 - 5, 230]) line(frames, P(RW.u0, 0, hh), P(RW.u1, 0, hh), hh === 230 ? 1.2 : 1.6);
+// 창 위 가랜드
+const garland = (a     , b     , n        , parent          = frames) => {
+  const gg = el('g', {}, parent);
+  const leaves = colour(gg, '#5d7f4d', 0.8);
+  let d = '';
+  for (let i = 0; i <= n; i++) { const p      = [lerp(a[0], b[0], i / n), lerp(a[1], b[1], i / n) + (i % 2 ? 5 : 0)]; d += `M${f(p[0] - 6)} ${f(p[1])} Q${f(p[0])} ${f(p[1] - 6)} ${f(p[0] + 6)} ${f(p[1])} Q${f(p[0])} ${f(p[1] + 5)} ${f(p[0] - 6)} ${f(p[1])}Z `; }
+  leaves.setAttribute('d', d);
+  for (let i = 1; i < n; i += 3) { const p      = [lerp(a[0], b[0], i / n), lerp(a[1], b[1], i / n) + 4]; const bw = colour(gg, '#c8323f', 0.7); bw.setAttribute('d', `M${pt(p)} l-5 -3 l0 6Z M${pt(p)} l5 -3 l0 6Z M${pt(p)} l-3 8 M${pt(p)} l3 8`); }
+};
+garland(P(0, LW.v0, 205), P(0, LW.v1, 205), 26);
+garland(P(RW.u0, 0, 275), P(RW.u1, 0, 275), 30);
+
+// 약장 (안쪽 벽, 원래 화면처럼 앞면이 방 쪽을 봄, 크기 줄임)
+const yak = el('g', {}, roomG);
+box(yak, 25, 0, 175, 24, 0, 110, '#d8b483', 1);
+pen(yak, 0.6).setAttribute('d', [0, 1, 2, 3, 4, 5].map((i) => `M${pt(P(25, 24, 10 + i * 16))} L${pt(P(175, 24, 10 + i * 16))}`).join(' ') + ' ' + Array.from({ length: 7 }, (_, i) => `M${pt(P(25 + (i + 1) * 18.75, 24, 10))} L${pt(P(25 + (i + 1) * 18.75, 24, 106))}`).join(' '));
+blot(yak).setAttribute('d', Array.from({ length: 48 }, (_, i) => { const r = i % 6, c = Math.floor(i / 6); const p = P(34.4 + c * 18.75, 24, 18 + r * 16); return `M${f(p[0] - 0.9)} ${f(p[1])} a0.9 0.9 0 1 0 1.8 0 a0.9 0.9 0 1 0 -1.8 0`; }).join(' '));
+box(yak, 25, 0, 175, 24, 0, 10, '#c79a63', 1);
+for (let i = 0; i < 5; i++) { const b = P(40 + i * 30, 12, 110); const j = colour(yak, ['#e8dcc4', '#cfd9d2', '#e8dcc4'][i % 3], 0.9); j.setAttribute('d', `M${f(b[0] - 5)} ${f(b[1])} Q${f(b[0] - 7)} ${f(b[1] - 9)} ${f(b[0] - 3)} ${f(b[1] - 11)} L${f(b[0] + 3)} ${f(b[1] - 11)} Q${f(b[0] + 7)} ${f(b[1] - 9)} ${f(b[0] + 5)} ${f(b[1])}Z`); line(yak, [b[0] - 3.5, b[1] - 13], [b[0] + 3.5, b[1] - 13], 1.4); }
+// 벽시계와 링크 액자 (오른쪽 벽, 창 아래)
+const wallM = (u        , h        ) => { const c = P(u, 0, h); return `matrix(${KX},${KY},0,1,${f(c[0])},${f(c[1])})`; };
+const clockG = el('g', { transform: wallM(345, 64) }, roomG);
+colour(clockG, '#c99a62', 1.2).setAttribute('d', 'M-17 0 a17 17 0 1 0 34 0 a17 17 0 1 0 -34 0Z');
+shape(clockG, 0.9).setAttribute('d', 'M-13 0 a13 13 0 1 0 26 0 a13 13 0 1 0 -26 0Z');
+pen(clockG, 0.6).setAttribute('d', Array.from({ length: 12 }, (_, i) => { const a = i * Math.PI / 6; return `M${f(10 * Math.sin(a))} ${f(-10 * Math.cos(a))} L${f(12 * Math.sin(a))} ${f(-12 * Math.cos(a))}`; }).join(' '));
+const hHand = pen(clockG, 1.4), mHand = pen(clockG, 0.9);
+const icons = ['M-4 2 L0 -3 L4 2 M-3 2 L-3 5 L3 5 L3 2', 'M-4 4 L3 -3 L5 -1 L-2 6Z', 'M-4 -2 L4 -2 L4 4 L-4 4Z M-1 1 a1.5 1.5 0 1 0 3 0 a1.5 1.5 0 1 0 -3 0', 'M0 5 L-3 0 a3 3 0 1 1 6 0Z'];
+icons.forEach((d, i) => { const g = el('g', { transform: wallM(400 + i * 36, 64) }, roomG); shape(g, 1).setAttribute('d', 'M-11 -11 L11 -11 L11 11 L-11 11Z'); pen(g, 0.9).setAttribute('d', d); });
+// 소식판 (왼쪽 벽, 창 앞에 걸림)
+const boardM = (v        , h        ) => { const c = P(0, v, h); return `matrix(${KX},${-KY},0,1,${f(c[0])},${f(c[1])})`; };
+const board = el('g', { transform: boardM(660, 190) }, roomG);
+colour(board, '#9a6a3c', 1.2).setAttribute('d', 'M-4 -4 L196 -4 L196 92 L-4 92Z');
+colour(board, '#2f4a3a', 0.8).setAttribute('d', 'M2 2 L190 2 L190 86 L2 86Z');
+const chalk = (x        , y        , s        , txt        , anchor = 'start') => { const tx = el('text', { x, y, 'font-size': s, 'font-family': '"Noto Sans KR",sans-serif', fill: '#f1ecd8', 'text-anchor': anchor }, board); tx.textContent = txt; return tx; };
+chalk(12, 20, 13, '동백숲 소식판'); const chalkDate = chalk(182, 20, 10, '', 'end');
+chalk(14, 40, 10, '방문'); chalk(182, 40, 10, '10번째', 'end');
+chalk(14, 55, 10, '동백 화분'); chalk(182, 55, 10, '꽃봉오리', 'end');
+chalk(14, 70, 10, '아기들'); const chalkKids = chalk(182, 70, 10, '', 'end');
+chalk(14, 84, 10, '지금'); const chalkNow = chalk(182, 84, 10, '', 'end');
+
+// ---------- 바닥 물건
+const station = (u        , v        ) => u + v;
+// 책상 한 벌: lat = 옆 방향, fwd = 앉은 사람이 보는 방향. face '+v'(왼쪽 아래를 봄) 또는 '+u'(오른쪽 아래를 봄, 창을 등짐)
+function deskAt(u        , v        , label        , prop        , face              = '+v', lampSide = 1) {
+  const M = (lat        , fwd        )      => (face === '+v' ? [u + lat, v + fwd] : [u + fwd, v + lat]);
+  const W = (lat        , fwd        , h = 0) => { const m = M(lat, fwd); return P(m[0], m[1], h); };
+  const wbox = (g         , l0        , f0        , l1        , f1        , h0        , h1        , col = PAPER, w = 1) => {
+    const a = M(l0, f0), b = M(l1, f1);
+    return box(g, Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.max(a[0], b[0]), Math.max(a[1], b[1]), h0, h1, col, w);
+  };
+  // 의자 (사람 뒤)
+  const ch = item(station(u, v) - 6);
+  wbox(ch, -11, -9, 11, 8, 18, 22, '#8a8f9c', 0.9);
+  wbox(ch, -9, -13, 9, -10, 26, 44, '#8a8f9c', 0.9);
+  line(ch, W(0, 0, 18), W(0, 0, 4), 1.1);
+  pen(ch, 1).setAttribute('d', `M${pt(W(-9, 0))} L${pt(W(0, 0, 4))} L${pt(W(9, 0))} M${pt(W(0, -9))} L${pt(W(0, 0, 4))} L${pt(W(0, 9))}`);
+  // 책상 (사람 앞)
+  const dk = item(station(u, v) + 30);
+  for (const [a, b] of [[-35, 15], [35, 15], [35, 39], [-35, 39]]         ) line(dk, W(a, b, 0), W(a, b, 34), 1.4);
+  wbox(dk, -36, 38, 36, 40, 8, 34, '#c79a63', 0.9);
+  wbox(dk, 14, 16, 34, 38, 0, 34, '#c79a63', 0.9);
+  wbox(dk, -38, 12, 38, 42, 34, 38, '#d9b07a', 1);
+  // 이름표 (책상 앞면)
+  const tagC = W(-8, 40, 20), dir = face === '+v' ? KY : -KY;
+  const tag = el('g', { transform: `matrix(${KX},${dir},0,1,${f(tagC[0])},${f(tagC[1])})` }, dk);
+  shape(tag, 0.8).setAttribute('d', `M-26 -7 L26 -7 L26 7 L-26 7Z`);
+  const tt = el('text', { x: 0, y: 3.4, 'font-size': 9, 'font-family': '"Noto Sans KR",sans-serif', 'font-weight': 700, fill: 'currentColor', 'text-anchor': 'middle' }, tag); tt.textContent = label;
+  // 모니터 (옆으로 비켜서)
+  let screen      = W(-27, 20, 56);
+  if (prop !== 'none' && prop !== 'herbs' && prop !== 'salad') {
+    wbox(dk, -40, 18, -14, 21, 42, 66, '#3a3f4f', 0.9);
+    line(dk, W(-27, 20, 38), W(-27, 20, 42), 1.6);
+    screen = W(-27, 18, 54);
+  }
+  // 소품
+  const pr = el('g', {}, dk);
+  const mug = W(6, 34, 38);
+  colour(pr, '#f1ead9', 0.9).setAttribute('d', `M${f(mug[0] - 3)} ${f(mug[1])} L${f(mug[0] - 3)} ${f(mug[1] - 6)} L${f(mug[0] + 3)} ${f(mug[1] - 6)} L${f(mug[0] + 3)} ${f(mug[1])}Z`);
+  if (prop === 'herbs') for (let i = 0; i < 3; i++) { const b = W(-24 + i * 14, 30, 38); colour(pr, ['#a8834f', '#7a8f4e', '#b45c3c'][i], 0.9).setAttribute('d', `M${f(b[0] - 6)} ${f(b[1] - 3)} Q${f(b[0])} ${f(b[1] + 4)} ${f(b[0] + 6)} ${f(b[1] - 3)}Z`); }
+  if (prop === 'herbs') { const s = W(-30, 22, 38); colour(pr, '#b8bcc2', 0.9).setAttribute('d', `M${f(s[0] - 7)} ${f(s[1])} L${f(s[0] + 7)} ${f(s[1])} M${pt(s)} L${f(s[0])} ${f(s[1] - 14)} M${f(s[0] - 7)} ${f(s[1] - 12)} L${f(s[0] + 7)} ${f(s[1] - 16)}`); }
+  if (prop === 'monitor-books') for (let i = 0; i < 3; i++) wbox(pr, 14, 24 + i * 5, 28, 28 + i * 5, 38, 38 + 4 + i * 3, ['#7d8f6a', '#c8323f', '#3b4f7a'][i], 0.7);
+  if (prop === 'salad') { const b = W(-10, 32, 38); colour(pr, '#f1ead9', 0.9).setAttribute('d', `M${f(b[0] - 9)} ${f(b[1] - 2)} Q${f(b[0])} ${f(b[1] + 4)} ${f(b[0] + 9)} ${f(b[1] - 2)}Z`); for (let i = 0; i < 4; i++) tint(el('circle', { cx: f(b[0] - 5 + i * 3.3), cy: f(b[1] - 3.4), r: 1.8, stroke: 'currentColor', 'stroke-width': 0.4 }, pr), ['#7a9f4e', '#e3a33a', '#c8323f', '#7a9f4e'][i]); }
+  if (prop === 'pot') { const b = W(-8, 30, 38); colour(pr, '#b8bcc2', 1).setAttribute('d', `M${f(b[0] - 8)} ${f(b[1])} L${f(b[0] - 8)} ${f(b[1] - 12)} L${f(b[0] + 8)} ${f(b[1] - 12)} L${f(b[0] + 8)} ${f(b[1])}Z`); line(pr, [b[0] - 9, b[1] - 12], [b[0] + 9, b[1] - 12], 1.4); }
+  if (prop === 'tablet') wbox(pr, -12, 24, 10, 36, 38, 39.5, '#3a3f4f', 0.8);
+  // 스탠드
+  const ls = W(lampSide * 30, 16, 38), lh2      = [ls[0] + 2, ls[1] - 22];
+  pen(pr, 1.1).setAttribute('d', `M${pt(ls)} L${f(ls[0])} ${f(ls[1] - 14)} L${pt(lh2)}`);
+  shape(pr, 1).setAttribute('d', `M${f(lh2[0] - 6)} ${f(lh2[1] + 4)} Q${f(lh2[0])} ${f(lh2[1] - 6)} ${f(lh2[0] + 6)} ${f(lh2[1] + 4)}Z`);
+  return { u, v, face, screen, lamp: [lh2[0], lh2[1] + 8]       , on: 0, label };
+}
+const ST = {
+  doctor: deskAt(40, 330, '원장실', 'monitor', '+u'),
+  squirrel: deskAt(95, 85, '약재실', 'herbs'),
+  deer: deskAt(390, 105, '공부방', 'monitor-books'),
+  chief: deskAt(240, 330, '총괄', 'monitor-books', '+u'),
+  rabbit: deskAt(240, 430, '건강칼럼팀', 'monitor-books', '+u'),
+  otter: deskAt(440, 300, '살림팀', 'monitor'),
+  cat: deskAt(620, 200, '소식팀', 'monitor'),
+  raccoon: deskAt(440, 500, '린다이어트', 'salad'),
+  fox: deskAt(560, 470, '영상팀', 'tablet'),
+  bear: deskAt(700, 380, '탕전실', 'pot'),
+};
+
+// 크리스마스 트리 (약장 오른쪽, 크고 풍성하게)
+const TU = 245, TV = 48;
+const treeB = P(TU, TV);
+const tree = item(TU + TV + 30);
+box(tree, TU - 20, TV - 20, TU + 20, TV + 20, 0, 18, '#b0703f', 1);
+pen(tree, 1.6).setAttribute('d', `M${f(treeB[0])} ${f(treeB[1] - 18)} L${f(treeB[0])} ${f(treeB[1] - 30)}`);
+const TH = 190;
+const tiers = [[56, 24], [49, 52], [42, 80], [34, 106], [26, 130], [17, 152]];
+tiers.forEach(([w, y0], ti) => {
+  const b      = [treeB[0], treeB[1] - y0], hgt = 46 - ti * 2;
+  let d = `M${f(b[0] - w)} ${f(b[1])}`;
+  const n = 7;
+  for (let i = 1; i <= n; i++) { const x0 = b[0] - w + (2 * w * (i - 0.5)) / n, x1 = b[0] - w + (2 * w * i) / n; d += ` Q${f(x0)} ${f(b[1] + 7)} ${f(x1)} ${f(b[1] + (i === n ? 0 : 2))}`; }
+  d += ` Q${f(b[0] + w * 0.35)} ${f(b[1] - hgt * 0.45)} ${f(b[0])} ${f(b[1] - hgt)} Q${f(b[0] - w * 0.35)} ${f(b[1] - hgt * 0.45)} ${f(b[0] - w)} ${f(b[1])}Z`;
+  colour(tree, ['#3f6b3d', '#447240', '#4a7844', '#4f7e48', '#55844c', '#5b8a50'][ti], 1).setAttribute('d', d);
+  const sn = tint(pen(tree, 1.6), '#f4f6f8', 'stroke'); sn.setAttribute('d', `M${f(b[0] - w * 0.5)} ${f(b[1] - hgt * 0.22)} Q${f(b[0] - w * 0.2)} ${f(b[1] - hgt * 0.35)} ${f(b[0] - w * 0.05)} ${f(b[1] - hgt * 0.5)}`);
+});
+// 장식 띠
+const swag = tint(pen(tree, 1.3), '#e3b04b', 'stroke');
+swag.setAttribute('d', [40, 74, 104, 132].map((y, i) => { const w = 50 - i * 9; return `M${f(treeB[0] - w)} ${f(treeB[1] - y + 4)} Q${f(treeB[0])} ${f(treeB[1] - y + 16)} ${f(treeB[0] + w)} ${f(treeB[1] - y - 6)}`; }).join(' '));
+const star = colour(tree, '#f2c14e', 0.9); star.setAttribute('d', Array.from({ length: 10 }, (_, i) => { const a = i * Math.PI / 5 - Math.PI / 2, r = i % 2 ? 4 : 9; return `${i ? 'L' : 'M'}${f(treeB[0] + r * Math.cos(a))} ${f(treeB[1] - TH + r * Math.sin(a))}`; }).join(' ') + 'Z');
+const rt = seeded(3);
+const orn = Array.from({ length: 16 }, (_, i) => { const yy = rt(30, 160), w = 52 * (1 - yy / TH); const p      = [treeB[0] + rt(-w, w) * 0.8, treeB[1] - yy]; const c = tint(el('circle', { cx: f(p[0]), cy: f(p[1]), r: 3.2, stroke: 'currentColor', 'stroke-width': 0.6 }, tree), ['#c8323f', '#e3b04b', '#9cc7e0', '#c8323f'][i % 4]); return c; });
+void orn;
+const treeLights = Array.from({ length: 30 }, (_, i) => { const yy = rt(26, 170), w = 54 * (1 - yy / TH); const p      = [treeB[0] + rt(-w, w) * 0.85, treeB[1] - yy]; return { p, c: tint(el('circle', { cx: f(p[0]), cy: f(p[1]), r: 1.7, stroke: 'currentColor', 'stroke-width': 0.3 }, tree), ['#f2c14e', '#e8eef5', '#f2c14e'][i % 3]) }; });
+// 선물 상자
+const gifts = item(TU + TV + 70);
+[[TU + 34, TV + 20, 14, 12, '#c8323f'], [TU + 12, TV + 34, 16, 10, '#3b4f7a'], [TU + 40, TV - 4, 12, 16, '#e3b04b']].forEach(([gu, gv, s, hh, col]) => {
+  box(gifts, (gu          ) - (s          ) / 2, (gv          ) - (s          ) / 2, (gu          ) + (s          ) / 2, (gv          ) + (s          ) / 2, 0, hh          , col          , 0.9);
+  const tp = P(gu          , gv          , hh          ); const rb = tint(pen(gifts, 1.2), '#f4f6f8', 'stroke');
+  rb.setAttribute('d', `M${pt(P((gu          ) - (s          ) / 2, gv          , hh          ))} L${pt(P((gu          ) + (s          ) / 2, gv          , hh          ))} M${pt(P(gu          , (gv          ) - (s          ) / 2, hh          ))} L${pt(P(gu          , (gv          ) + (s          ) / 2, hh          ))} M${pt(tp)} l-4 -4 M${pt(tp)} l4 -4`);
+});
+
+// 화분
+const plant = (u        , v        , s = 1) => {
+  const g = item(u + v); const b = P(u, v);
+  colour(g, '#b8744a', 1).setAttribute('d', `M${f(b[0] - 8 * s)} ${f(b[1] - 16 * s)} L${f(b[0] + 8 * s)} ${f(b[1] - 16 * s)} L${f(b[0] + 6 * s)} ${f(b[1])} L${f(b[0] - 6 * s)} ${f(b[1])}Z`);
+  const leaves = Array.from({ length: 5 }, (_, i) => ({ p: colour(g, '#6f9a5a', 0.8), sp: spring(16, 3), a: -60 + i * 30, l: (20 + (i % 2) * 8) * s }));
+  const flowers = Array.from({ length: 2 }, () => tint(el('circle', { r: 2.4 * s, stroke: 'currentColor', 'stroke-width': 0.5 }, g), '#c8323f'));
+  return { b: [b[0], b[1] - 16 * s]       , leaves, flowers };
+};
+const plants = [[30, 240, 1], [305, 185, 1], [600, 255, 0.9], [735, 455, 1.1], [470, 660, 1], [300, 470, 0.9], [270, 740, 1.1], [520, 130, 0.8]].map(([u, v, s]) => plant(u, v, s));
+
+// 라운지 (왼쪽 아래): 소파는 원장님·토끼처럼 창을 등지고 방 안쪽(+u)을 봄. 기역자 책장으로 둘러쌈, 옆에 탁자 조명과 스탠드 조명
+const lounge = item(560);
+const rug = colour(lounge, '#e9d6bd', 0.8); rug.setAttribute('d', poly([P(40, 545), P(225, 545), P(225, 735), P(40, 735)]));
+pen(lounge, 0.6).setAttribute('d', `M${pt(P(52, 557))} L${pt(P(213, 557))} L${pt(P(213, 723))} L${pt(P(52, 723))}Z`);
+// 기역자 책장: 위쪽(u 방향)과 오른쪽(v 방향)
+const books = (g         , along           , a0        , a1        , fixed        , h0        , h1        , seed        ) => {
+  const r = seeded(seed); let a = a0 + 2;
+  const cols = ['#7d8f6a', '#c8323f', '#3b4f7a', '#e3b04b', '#b0703f', '#9cc7e0', '#e8dcc4'];
+  while (a < a1 - 4) {
+    const w = r(3, 6), hh = r((h1 - h0) * 0.6, (h1 - h0) * 0.92), lean = r() < 0.08 ? 3 : 0;
+    const p0 = along === 'u' ? P(a, fixed, h0) : P(fixed, a, h0), p1 = along === 'u' ? P(a + w, fixed, h0) : P(fixed, a + w, h0);
+    tint(el('path', { d: `M${pt(p0)} L${pt(p1)} L${f(p1[0] + lean)} ${f(p1[1] - hh)} L${f(p0[0] + lean)} ${f(p0[1] - hh)}Z`, stroke: 'currentColor', 'stroke-width': 0.5 }, g), cols[Math.floor(r(0, cols.length))]);
+    a += w + (r() < 0.12 ? 6 : 0.4);
+  }
+};
+const shelfA = item(30 + 515);
+box(shelfA, 30, 512, 232, 530, 0, 62, '#c79a63', 1);
+quad(shelfA, [P(34, 530, 4), P(228, 530, 4), P(228, 530, 58), P(34, 530, 58)], '#8a5d36', 0.6);
+line(shelfA, P(34, 530, 31), P(228, 530, 31), 1.2);
+books(shelfA, 'u', 34, 228, 530, 5, 30, 11); books(shelfA, 'u', 34, 228, 530, 32, 57, 12);
+for (let i = 0; i < 3; i++) { const b = P(60 + i * 70, 521, 62); colour(shelfA, ['#6f9a5a', '#e8dcc4', '#6f9a5a'][i], 0.8).setAttribute('d', i === 1 ? `M${f(b[0] - 4)} ${f(b[1])} L${f(b[0] - 4)} ${f(b[1] - 10)} L${f(b[0] + 4)} ${f(b[1] - 10)} L${f(b[0] + 4)} ${f(b[1])}Z` : `M${f(b[0] - 5)} ${f(b[1])} Q${f(b[0] - 7)} ${f(b[1] - 12)} ${f(b[0])} ${f(b[1] - 16)} Q${f(b[0] + 7)} ${f(b[1] - 12)} ${f(b[0] + 5)} ${f(b[1])}Z`); }
+const shelfB = item(232 + 600);
+box(shelfB, 232, 512, 250, 650, 0, 62, '#c79a63', 1);
+quad(shelfB, [P(250, 516, 4), P(250, 646, 4), P(250, 646, 58), P(250, 516, 58)], '#8a5d36', 0.6);
+line(shelfB, P(250, 516, 31), P(250, 646, 31), 1.2);
+books(shelfB, 'v', 516, 646, 250, 5, 30, 13); books(shelfB, 'v', 516, 646, 250, 32, 57, 14);
+// 소파 (등받이가 창 쪽, 앉으면 +u를 봄)
+const sofa = item(50 + 575);
+box(sofa, 48, 570, 60, 700, 0, 46, '#efe6d6', 1);
+box(sofa, 60, 570, 100, 700, 0, 20, '#efe6d6', 1);
+box(sofa, 48, 562, 100, 572, 0, 30, '#efe6d6', 1);
+pen(sofa, 0.7).setAttribute('d', `M${pt(P(60, 635, 20))} L${pt(P(100, 635, 20))}`);
+const cushion = (v        , col        ) => { const g = sofa; const c = colour(g, col, 0.8); c.setAttribute('d', poly([P(60, v - 14, 22), P(60, v + 14, 22), P(60, v + 13, 42), P(60, v - 13, 42)])); pen(g, 0.6).setAttribute('d', `M${pt(P(60, v - 5, 22))} L${pt(P(60, v - 5, 42))} M${pt(P(60, v + 5, 22))} L${pt(P(60, v + 5, 42))} M${pt(P(60, v - 14, 30))} L${pt(P(60, v + 14, 30))}`); };
+cushion(592, '#b8323f'); cushion(682, '#e3b04b');
+const blanket = colour(sofa, '#b8323f', 0.8); blanket.setAttribute('d', poly([P(48, 650, 46), P(48, 670, 46), P(96, 672, 20), P(96, 652, 20)]));
+const sofaArm = item(100 + 700); box(sofaArm, 48, 698, 100, 708, 0, 30, '#efe6d6', 1);
+// 소파 앞 탁자와 찻주전자
+const table = item(140 + 615); box(table, 138, 612, 172, 668, 14, 18, '#c79a63', 1); for (const [a, b] of [[141, 665], [169, 665], [169, 615]]) line(table, P(a, b, 0), P(a, b, 14), 1.4);
+const TEA      = [155, 630];
+const tp = P(TEA[0], TEA[1], 18); colour(table, '#9aa7b3', 0.9).setAttribute('d', `M${f(tp[0] - 6)} ${f(tp[1])} Q${f(tp[0] - 7)} ${f(tp[1] - 9)} ${f(tp[0])} ${f(tp[1] - 9)} Q${f(tp[0] + 7)} ${f(tp[1] - 9)} ${f(tp[0] + 6)} ${f(tp[1])}Z M${f(tp[0] + 6)} ${f(tp[1] - 5)} l4 -3`);
+const cupA = P(150, 652, 18); colour(table, '#f1ead9', 0.8).setAttribute('d', `M${f(cupA[0] - 3)} ${f(cupA[1])} L${f(cupA[0] - 3)} ${f(cupA[1] - 4)} L${f(cupA[0] + 3)} ${f(cupA[1] - 4)} L${f(cupA[0] + 3)} ${f(cupA[1])}Z`);
+const steam = pen(table, 0.7);
+// 소파 옆 둥근 탁자 + 탁자 조명 (원배경처럼)
+const sideL = item(75 + 545);
+const st0 = P(75, 547, 26);
+colour(sideL, '#c79a63', 1).setAttribute('d', `M${f(st0[0] - 13)} ${f(st0[1])} a13 5 0 1 0 26 0 a13 5 0 1 0 -26 0Z`);
+pen(sideL, 1.3).setAttribute('d', `M${f(st0[0])} ${f(st0[1] + 4)} L${f(st0[0])} ${f(st0[1] + 26)} M${f(st0[0] - 7)} ${f(st0[1] + 28)} L${f(st0[0] + 7)} ${f(st0[1] + 24)}`);
+pen(sideL, 1.1).setAttribute('d', `M${f(st0[0] + 2)} ${f(st0[1] - 1)} L${f(st0[0] + 2)} ${f(st0[1] - 14)}`);
+const tableLamp      = [st0[0] + 2, st0[1] - 22];
+colour(sideL, '#f3e6c4', 1).setAttribute('d', `M${f(tableLamp[0] - 7)} ${f(tableLamp[1] + 8)} L${f(tableLamp[0] - 4)} ${f(tableLamp[1] - 3)} L${f(tableLamp[0] + 4)} ${f(tableLamp[1] - 3)} L${f(tableLamp[0] + 7)} ${f(tableLamp[1] + 8)}Z`);
+const bookOnT = P(68, 552, 26); colour(sideL, '#3b4f7a', 0.6).setAttribute('d', `M${f(bookOnT[0] - 5)} ${f(bookOnT[1])} l8 -2 l2 1.5 l-8 2Z`);
+// 소파 끝 스탠드 조명
+const floorL = item(122 + 712);
+const fl0 = P(122, 712);
+pen(floorL, 1.3).setAttribute('d', `M${f(fl0[0] - 7)} ${f(fl0[1])} L${f(fl0[0] + 7)} ${f(fl0[1] - 3)} M${f(fl0[0])} ${f(fl0[1] - 1.5)} L${f(fl0[0])} ${f(fl0[1] - 74)}`);
+const floorLamp      = [fl0[0], fl0[1] - 82];
+colour(floorL, '#f3e6c4', 1).setAttribute('d', `M${f(floorLamp[0] - 10)} ${f(floorLamp[1] + 10)} L${f(floorLamp[0] - 6)} ${f(floorLamp[1] - 4)} L${f(floorLamp[0] + 6)} ${f(floorLamp[1] - 4)} L${f(floorLamp[0] + 10)} ${f(floorLamp[1] + 10)}Z`);
+// 촬영 코너 (바다 창 아래 오른쪽): 러그, 카메라 삼각대, 소프트박스 2개, 링라이트, 의자, 작은 탁자
+const studioRug = item(150); colour(studioRug, '#ecdcc6', 0.8).setAttribute('d', poly([P(520, 125), P(640, 125), P(640, 200), P(520, 200)]));
+const studio = item(300);
+const stand = (u        , v        , hh        ) => { const top = P(u, v, hh); pen(studio, 1).setAttribute('d', `M${pt(top)} L${pt(P(u - 11, v - 7))} M${pt(top)} L${pt(P(u + 11, v - 5))} M${pt(top)} L${pt(P(u, v + 11))}`); return top; };
+// 소프트박스: 사각 확산판 + 뒤쪽 깔때기
+const softbox = (u        , v        , hh        , tiltDir        ) => {
+  const top = stand(u, v, hh);
+  const c      = [top[0], top[1] - 14];
+  colour(studio, '#d8d4cc', 1).setAttribute('d', `M${f(c[0] - 4 * tiltDir)} ${f(c[1] - 8)} L${f(c[0] - 14 * tiltDir)} ${f(c[1] - 2)} L${f(c[0] - 14 * tiltDir)} ${f(c[1] + 12)} L${f(c[0] - 4 * tiltDir)} ${f(c[1] + 8)}Z`);
+  shape(studio, 1.1).setAttribute('d', `M${f(c[0] - 15)} ${f(c[1] - 18 + 6 * tiltDir)} L${f(c[0] + 15)} ${f(c[1] - 18 - 6 * tiltDir)} L${f(c[0] + 15)} ${f(c[1] + 14 - 6 * tiltDir)} L${f(c[0] - 15)} ${f(c[1] + 14 + 6 * tiltDir)}Z`);
+  pen(studio, 0.6).setAttribute('d', `M${f(c[0] - 12)} ${f(c[1] - 14 + 6 * tiltDir)} L${f(c[0] + 12)} ${f(c[1] - 14 - 6 * tiltDir)} L${f(c[0] + 12)} ${f(c[1] + 10 - 6 * tiltDir)} L${f(c[0] - 12)} ${f(c[1] + 10 + 6 * tiltDir)}Z`);
+  return c;
+};
+const sbA = softbox(530, 85, 74, 1);
+const sbB = softbox(690, 105, 74, -1);
+const camTop = stand(580, 95, 50); box(studio, 572, 90, 588, 102, 50, 60, '#3a3f4f', 0.9);
+const lens = P(580, 104, 55); shape(studio, 0.9).setAttribute('d', `M${f(lens[0] - 3)} ${f(lens[1])} a3 3 0 1 0 6 0 a3 3 0 1 0 -6 0`);
+void camTop;
+const rl = stand(636, 112, 62);
+const ring = shape(studio, 2.4); ring.setAttribute('d', `M${f(rl[0] - 11)} ${f(rl[1] - 10)} a11 11 0 1 0 22 0 a11 11 0 1 0 -22 0`); ring.setAttribute('fill', 'none');
+pen(studio, 0.6).setAttribute('d', `M${f(rl[0] - 7.5)} ${f(rl[1] - 10)} a7.5 7.5 0 1 0 15 0 a7.5 7.5 0 1 0 -15 0`);
+const phone = el('rect', { x: f(rl[0] - 2), y: f(rl[1] - 13), width: 4, height: 6, rx: 0.8, fill: '#3a3f4f', stroke: 'currentColor', 'stroke-width': 0.6 }, studio); void phone;
+const stoolS = item(730 + 150); box(stoolS, 722, 142, 738, 158, 0, 22, '#c79a63', 1);
+const sideT = item(760 + 70); box(sideT, 748, 58, 774, 84, 28, 31, '#c79a63', 1); line(sideT, P(761, 71, 0), P(761, 71, 28), 1.4);
+const lampT = P(761, 71, 31); colour(sideT, '#6f9a5a', 0.8).setAttribute('d', `M${f(lampT[0] - 5)} ${f(lampT[1])} Q${f(lampT[0] - 8)} ${f(lampT[1] - 12)} ${f(lampT[0])} ${f(lampT[1] - 18)} Q${f(lampT[0] + 8)} ${f(lampT[1] - 12)} ${f(lampT[0] + 5)} ${f(lampT[1])}Z`);
+const softGlow        = [sbA, sbB];
+
+// ---------- 직원
+                                                                                                     
+                                        
+const FD                      = { '+u': [1, TS], '-u': [-1, -TS], '+v': [-1, TS], '-v': [1, -TS] };
+function isoPlace(g             , u        , v        , face        , s        , lift = 0) {
+  const [x0, y0] = P(u, v, lift); const [dx, dy] = FD[face]; const a = s * dx, b = s * dy;
+  g.setAttribute('transform', `matrix(${f(a)},${f(b)},0,${s},${f(x0 - 40 * a)},${f(y0 - 40 * b - 120 * s)})`);
+}
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       
+                  
+                                                                                                                 
+                                                                                                                                                              
+                                                                                                                    
+                                                                                                                                             
+ 
+// 부엉이처럼 귀여운 비율: 큰 머리, 동그란 몸, 짧은 팔다리
+const S2 = 1.15;
+const FUR                       = { doctor: '#f6e2cc', squirrel: '#d9843a', deer: '#c99a62', rabbit: '#f5ece2', otter: '#8a5a3c', cat: '#e8b77e', raccoon: '#9e9e9e', fox: '#de7a34', bear: '#a8703f' };
+const MUZ                       = { doctor: '#f6e2cc', squirrel: '#f6e6cc', deer: '#ecd8b6', rabbit: '#ffffff', otter: '#efe2cc', cat: '#fbf3e6', raccoon: '#f2eee6', fox: '#fbf3e6', bear: '#e2c49a' };
+const EARIN                       = { doctor: '#000', squirrel: '#f0c9a0', deer: '#f0c6b4', rabbit: '#eea6b2', otter: '#5e3c26', cat: '#eea6b2', raccoon: '#4a4a4a', fox: '#3a2a22', bear: '#6b4528' };
+const PAW                       = { doctor: '#2b2b33', squirrel: '#b8682a', deer: '#6b4a2e', rabbit: '#e8dccd', otter: '#6e4630', cat: '#d9a56c', raccoon: '#4a4a4a', fox: '#3a2a22', bear: '#7e5230' };
+const HEADR                       = { doctor: 9.6, squirrel: 10.4, deer: 10, rabbit: 10.4, otter: 10.8, cat: 10.4, raccoon: 10.6, fox: 10.2, bear: 11.4 };
+const WIDE                       = { doctor: 1, squirrel: 1, deer: 0.95, rabbit: 1, otter: 1.12, cat: 1, raccoon: 1.12, fox: 0.98, bear: 1.3 };
+function makePerson(kind      , name        , col        , st                           , inAt        , outAt        )         {
+  const g = item(0); g.style.cursor = 'pointer'; el('title', {}, g).textContent = name;
+  const tail = kind === 'cat' ? pen(g, PEN * 2.2) : paint(g, FUR[kind], PEN * 0.9);
+  const tailTip = paint(g, '#fbf3e6', PEN * 0.8);
+  const rings = pen(g, PEN * 1.4);
+  const limbCol = kind === 'doctor' ? '#ffffff' : FUR[kind];
+  const farArm = solid(limb(g, 4.6), kind === 'doctor' ? PAPER : col); const farHand = paint(g, limbCol, PEN * 0.8);
+  const legCol = kind === 'doctor' ? '#2b2b33' : FUR[kind];
+  const legs               = [solid(limb(g, 5.6), legCol), solid(limb(g, 5.6), legCol)];
+  const feet                                   = [paint(g, PAW[kind], PEN * 0.8), paint(g, PAW[kind], PEN * 0.8)];
+  const body = kind === 'doctor' ? shape(g) : paint(g, col);
+  const belly = paint(g, MUZ[kind], PEN * 0.6);
+  const collar = kind === 'doctor' ? paint(g, '#3b4f7a', PEN * 0.6) : pen(g, PEN * 0.7);
+  const ears = paint(g, FUR[kind], PEN * 0.9);
+  const earIn = paint(g, EARIN[kind], PEN * 0.4);
+  const R = HEADR[kind];
+  const head = el('ellipse', { rx: R, ry: R * 0.93, stroke: 'currentColor', 'stroke-width': PEN }, g);
+  const muzzle = paint(g, MUZ[kind], PEN * 0.8);
+  const dark = blot(g); const nose = blot(g); const detail = pen(g, PEN * 0.6); const eye = blot(g);
+  const cheek = tint(el('path', { opacity: 0.55 }, g), '#f0a0a0');
+  const nearArm = solid(limb(g, 4.6), kind === 'doctor' ? PAPER : col); const nearHand = paint(g, limbCol, PEN * 0.8);
+  const p         = {
+    kind, name, col, fur: FUR[kind], st, inAt, outAt, g, parts: { tail, tailTip, rings, farArm, farHand, legs, feet, body, belly, collar, ears, earIn, head, muzzle, dark, nose, detail, eye, cheek, nearArm, nearHand },
+    walk: gait({ kind: 'walk', period: 0.56, stride: 12, lift: 2.8, thigh: 7.5, shin: 7.5, ankleY: 117.6, heelOff: 8, toe: 2.6 }),
+    arms: [spring(60, 9), spring(60, 9)], tailS: spring(14, 2.5),
+    u: 500, v: 700, face: '-v', phase: Math.random(), pose: 'off', sitK: 0, path: [], after: 'sit', spot: null, timer: 0, waveT: -1, key: 0, atDesk: false,
+  };
+  g.addEventListener('pointerdown', () => { if (p.waveT < 0) p.waveT = 0; });
+  g.style.display = 'none';
+  return p;
+}
+const staff           = [
+  makePerson('doctor', '원장님', PAPER, ST.doctor, 5, 86),
+  makePerson('rabbit', '건강칼럼팀 토끼', '#e39aa6', ST.rabbit, 7, 80),
+  makePerson('squirrel', '약재실 다람쥐', '#6f9a52', ST.squirrel, 8.5, 82),
+  makePerson('fox', '영상팀 여우', '#33466e', ST.fox, 10, 83),
+  makePerson('cat', '소식팀 고양이', '#e7a3a0', ST.cat, 11.5, 84),
+  makePerson('deer', '공부방 사슴', '#8e9c74', ST.deer, 13, 81),
+  makePerson('otter', '살림팀 수달', '#2f3f66', ST.otter, 14.5, 85),
+  makePerson('raccoon', '린다이어트 너구리', '#7aa35a', ST.raccoon, 16, 87),
+  makePerson('bear', '탕전실 곰', '#3b4f7a', ST.bear, 17.5, 88),
+];
+
+// ---------- 통로 (복도) 그래프
+const LINES          = [
+  [[15, 270], [140, 270], [200, 270], [260, 270], [330, 270], [440, 270], [470, 270], [500, 270], [580, 270], [700, 270], [760, 270]],
+  [[200, 380], [330, 380], [500, 380], [560, 380]],
+  [[260, 560], [330, 560], [500, 560], [760, 560]],
+  [[330, 120], [330, 270], [330, 380], [330, 560], [330, 725]],
+  [[110, 725], [330, 725]],
+  [[500, 270], [500, 380], [500, 470], [500, 560], [500, 700]],
+  [[760, 160], [760, 270], [760, 560]],
+  [[620, 160], [760, 160]], [[175, 120], [230, 120], [330, 120]],
+];
+const K = (p     ) => `${p[0]},${p[1]}`;
+const adj = new Map               ();
+for (const L of LINES) for (let i = 0; i < L.length - 1; i++) { for (const [a, b] of [[L[i], L[i + 1]], [L[i + 1], L[i]]]) { if (!adj.has(K(a))) adj.set(K(a), []); adj.get(K(a)) .push(b); } }
+function route(a     , b     )        {
+  const dist = new Map                ([[K(a), 0]]), prev = new Map             (), done = new Set        ();
+  const q        = [a];
+  while (q.length) {
+    q.sort((x, y) => dist.get(K(x))  - dist.get(K(y)) ); const c = q.shift() ; const ck = K(c);
+    if (done.has(ck)) continue; done.add(ck); if (ck === K(b)) break;
+    for (const n of adj.get(ck) ?? []) { const d = dist.get(ck)  + Math.abs(n[0] - c[0]) + Math.abs(n[1] - c[1]); if (d < (dist.get(K(n)) ?? 1e9)) { dist.set(K(n), d); prev.set(K(n), c); q.push(n); } }
+  }
+  const out        = []; let c                  = b; while (c && K(c) !== K(a)) { out.unshift(c); c = prev.get(K(c)); }
+  return out;
+}
+const ENTRY      = [500, 700];
+// 통로 끝에서 자리까지 가는 길 (첫 점은 통로 위)
+const APP = new Map                                  ([
+  [ST.doctor, [[15, 270], [15, 330]]], [ST.squirrel, [[175, 120], [175, 45], [95, 45]]], [ST.deer, [[330, 120], [330, 70], [390, 70]]], [ST.rabbit, [[200, 380], [200, 430]]], [ST.chief, [[200, 270], [200, 330]]],
+  [ST.otter, [[440, 270]]], [ST.cat, [[620, 160]]], [ST.raccoon, [[500, 470], [440, 470]]], [ST.fox, [[560, 380]]], [ST.bear, [[700, 270]]],
+]);
+                                                                                                                         
+const SPOTS         = [
+  { at: [85, 605], app: [110, 725], via: [[110, 605]], face: '+u', kind: 'sit', busy: null, dur: 7 },
+  { at: [85, 665], app: [110, 725], via: [[110, 665]], face: '+u', kind: 'sit', busy: null, dur: 8 },
+  { at: [580, 165], app: [580, 270], kind: 'stand', busy: null, dur: 4 },
+];
+
+// ---------- 그리기: 동물 직원 (부엉이처럼 큰 머리·동그란 몸·짧은 팔다리)
+const lp = (a     , b     , u        )      => [lerp(a[0], b[0], u), lerp(a[1], b[1], u)];
+const ell = (cx        , cy        , rx        , ry        ) => `M${f(cx - rx)} ${f(cy)} a${f(rx)} ${f(ry)} 0 1 0 ${f(2 * rx)} 0 a${f(rx)} ${f(ry)} 0 1 0 ${f(-2 * rx)} 0Z`;
+const SITY = 120 - 22 / S2 + 1; // 의자 위 엉덩이 높이
+function footPath(a     , pitch        ) {
+  const th = (pitch * Math.PI) / 180, c = Math.cos(th), s = Math.sin(th);
+  const pts        = [[-2.4, 0], [-2.2, -1.8], [3.4, -1.8], [4.6, 0]].map(([x, y]) => [a[0] + x * c - y * s, a[1] + 1.6 + x * s + y * c]);
+  return `M${pt(pts[0])} Q${pt(pts[1])} ${f((pts[1][0] + pts[2][0]) / 2)} ${f(pts[1][1] - 0.6)} Q${pt(pts[2])} ${pt(pts[3])}Z`;
+}
+function drawPerson(p        , t        , dt        , Pl         , wind        ) {
+  const q = p.parts;
+  let go = p.pose === 'walk' ? 1 : 0;
+  if (p.waveT >= 0) { p.waveT += dt; if (p.waveT > 2.2) p.waveT = -1; }
+  const selfie = p.pose === 'stand' && p.spot?.kind === 'stand';
+  const wave = selfie ? 1 : p.waveT < 0 ? 0 : p.waveT < 0.35 ? ease(p.waveT / 0.35) : p.waveT < 1.8 ? 1 : 1 - ease((p.waveT - 1.8) / 0.4);
+  if (go > 0) go *= 1 - wave * 0.95;
+  const pose = p.walk.pose(p.phase, go);
+  if (go > 0) p.phase += (dt / p.walk.period) * go;
+  const k = ease(p.sitK);
+  // 다리: 짧고 통통하게. 앉으면 앞으로 뻗음
+  const hip = lp(pose.hip, [38, SITY], k);
+  const fA = pose.feet[0], fB = pose.feet[1];
+  const kA = lp(fA.knee, [45, SITY + 1], k), aA = lp(fA.ankle, [49, SITY + 6], k);
+  const kB = lp(fB.knee, [43, SITY + 1.6], k), aB = lp(fB.ankle, [46.5, SITY + 6.6], k);
+  q.legs[0].draw([hip, kA, aA], [0.2, 0.4]); q.legs[1].draw([hip, kB, aB], [0.2, 0.4]);
+  q.feet[0].setAttribute('d', footPath(aA, fA.pitch * (1 - k) - k * 20)); q.feet[1].setAttribute('d', footPath(aB, fB.pitch * (1 - k) - k * 20));
+  const fl = k > 0.5 ? 0 : pose.front;
+  p.g.insertBefore(q.legs[1 - fl].g, q.legs[fl].g); p.g.insertBefore(q.feet[fl], q.body); p.g.insertBefore(q.feet[1 - fl], q.feet[fl]);
+  // 몸통: 달걀 모양, 걸을 때 디딘 발 쪽으로 살짝 기우뚱
+  const W2 = WIDE[p.kind], breathe = Math.sin(t * 1.7 + p.st.u) * 0.35;
+  const sway = go * ((fA.ankle[0] - 40) / 6) * 0.6;
+  const bc      = [hip[0] + 1 + k * 1.5 + sway * 0.3, hip[1] - 10.5 + breathe * 0.3];
+  const rx = 8.6 * W2, ryT = 11, ryB = 6.5;
+  q.body.setAttribute('d', `M${f(bc[0] - rx)} ${f(bc[1])} Q${f(bc[0] - rx)} ${f(bc[1] - ryT)} ${f(bc[0])} ${f(bc[1] - ryT)} Q${f(bc[0] + rx)} ${f(bc[1] - ryT)} ${f(bc[0] + rx)} ${f(bc[1])} Q${f(bc[0] + rx)} ${f(bc[1] + ryB + 3)} ${f(bc[0])} ${f(bc[1] + ryB + 3)} Q${f(bc[0] - rx)} ${f(bc[1] + ryB + 3)} ${f(bc[0] - rx)} ${f(bc[1])}Z`);
+  const furC = nightTint(p.fur, Pl), muzC = nightTint(MUZ[p.kind], Pl), inC = nightTint(EARIN[p.kind], Pl), pawC = nightTint(PAW[p.kind], Pl);
+  if (p.kind === 'doctor') {
+    q.body.setAttribute('fill', 'var(--paper)');
+    q.belly.setAttribute('d', '');
+    q.collar.setAttribute('fill', nightTint('#3b4f7a', Pl));
+    q.collar.setAttribute('d', `M${f(bc[0] + 1)} ${f(bc[1] - ryT + 1)} L${f(bc[0] + 4)} ${f(bc[1] - ryT + 1)} L${f(bc[0] + 2.6)} ${f(bc[1] + 1)}Z`);
+  } else {
+    q.body.setAttribute('fill', nightTint(p.col, Pl));
+    q.belly.setAttribute('fill', muzC);
+    q.belly.setAttribute('d', ell(bc[0] + 3.2 * W2, bc[1] + 1, 4.2 * W2, 6.2));
+    q.collar.setAttribute('d', `M${f(bc[0] - 4)} ${f(bc[1] - ryT + 1.4)} Q${f(bc[0] + 1)} ${f(bc[1] - ryT + 4.4)} ${f(bc[0] + 6)} ${f(bc[1] - ryT + 1.6)}`);
+  }
+  q.legs.forEach((l) => l.g.querySelectorAll('path').forEach((e) => { if (e.getAttribute('fill') && e.getAttribute('fill') !== 'none' && p.kind !== 'doctor') e.setAttribute('fill', furC); }));
+  q.feet.forEach((e) => e.setAttribute('fill', pawC));
+  [q.farArm, q.nearArm].forEach((l) => l.g.querySelectorAll('path').forEach((e) => { const fl = e.getAttribute('fill'); if (fl && fl !== 'none') e.setAttribute('fill', p.kind === 'doctor' ? 'var(--paper)' : nightTint(p.col, Pl)); }));
+  q.farHand.setAttribute('fill', p.kind === 'doctor' ? furC : pawC); q.nearHand.setAttribute('fill', p.kind === 'doctor' ? furC : pawC);
+  // 꼬리 (몸 뒤쪽에 붙음, 크게)
+  const swt = p.tailS.step(-go * 3 - wind * 2 + Math.sin(t * 2.1 + p.st.v) * 1.2, dt);
+  const r      = [bc[0] - rx + 1.5, bc[1] + 3], T = 1.25;
+  const R2 = (dx        , dy        ) => `${f(r[0] + dx * T)} ${f(r[1] + dy * T)}`;
+  let tail = '', tip = '', rings = '';
+  const kk = k;
+  switch (p.kind) {
+    case 'deer': tail = `M${R2(0, 0)} Q${R2(-3, -1)} ${R2(-3.6, -4)} Q${R2(-1, -3)} ${R2(0.6, -1.4)}Z`; break;
+    case 'rabbit': tail = ell(r[0] - 1.6 * T, r[1] + 1, 3 * T, 2.8 * T); break;
+    case 'bear': tail = ell(r[0] - 0.4 * T, r[1] + 1, 2 * T, 1.8 * T); break;
+    case 'squirrel': tail = `M${R2(0, 0)} Q${R2(-13 + swt, -1)} ${R2(-11 + swt, -19 + kk * 3)} Q${R2(-9 + swt, -30 + kk * 4)} ${R2(0 + swt, -27 + kk * 4)} Q${R2(5 + swt, -23 + kk * 3)} ${R2(0 + swt, -20 + kk * 3)} Q${R2(-5 + swt, -13)} ${R2(0, -5)}Z`; rings = `M${R2(-7 + swt, -9)} q${f(-2 * T)} ${f(-6 * T)} 0 ${f(-12 * T)}`; break;
+    case 'fox': tail = `M${R2(0, 0)} Q${R2(-9 + swt, 7)} ${R2(-17 + swt * 1.6, -2 + kk * 5)} Q${R2(-11 + swt, -3)} ${R2(0, -4)}Z`; tip = `M${R2(-13.5 + swt * 1.4, 1 + kk * 4)} Q${R2(-18 + swt * 1.6, 1 + kk * 5)} ${R2(-17 + swt * 1.6, -2 + kk * 5)} Q${R2(-15 + swt * 1.4, -2.6 + kk * 4)} ${R2(-12.6 + swt * 1.3, -1.6 + kk * 4)}Z`; break;
+    case 'raccoon':
+      tail = `M${R2(0, 0)} Q${R2(-9 + swt, 6)} ${R2(-16 + swt * 1.4, 3 - kk * 2)} Q${R2(-17 + swt * 1.4, -1 - kk * 2)} ${R2(-14 + swt * 1.3, -1 - kk * 2)} Q${R2(-9 + swt, -1)} ${R2(0, -4)}Z`;
+      rings = [0.3, 0.55, 0.8].map((s) => { const x = -16 * s + swt * 1.2 * s, y = 12 * s * (1 - s) + (3 - kk * 2) * s * s - 1.5; return `M${R2(x, y - 2.6)} L${R2(x - 0.6, y + 2.6)}`; }).join(' ');
+      break;
+    case 'otter': tail = `M${R2(0, 0)} Q${R2(-8 + swt * 0.5, 7)} ${R2(-15 + swt, 9 - kk * 4)} Q${R2(-7, 2)} ${R2(0, -3)}Z`; break;
+    case 'cat': tail = `M${R2(0, 0)} Q${R2(-9 + swt, 7)} ${R2(-11 + swt * 1.4, -4 + kk * 6)} Q${R2(-11 + swt * 1.4, -11 + kk * 7)} ${R2(-7 + swt, -12 + kk * 7)}`; rings = `M${R2(-9 + swt, 3)} l${f(-2 * T)} ${f(1 * T)} M${R2(-10.6 + swt * 1.3, -3 + kk * 6)} l${f(-2.4 * T)} 0`; break;
+  }
+  q.tail.setAttribute('d', tail); q.tailTip.setAttribute('d', tip); q.rings.setAttribute('d', rings);
+  q.tail.setAttribute('fill', p.kind === 'cat' ? 'none' : furC); if (p.kind === 'cat') q.tail.setAttribute('stroke', furC);
+  q.tailTip.setAttribute('fill', muzC);
+  q.rings.setAttribute('stroke', p.kind === 'squirrel' ? nightTint('#f6e6cc', Pl) : 'currentColor');
+  // 머리: 크게, 몸 위에 바로 얹힘
+  const typing = p.pose === 'sit' && p.atDesk && wave < 0.01;
+  const R = HEADR[p.kind];
+  const nod = typing ? Math.sin(t * 0.7 + p.st.u) * 0.4 : 0;
+  const hc      = [bc[0] + 2.2 + k * 1, bc[1] - ryT - R * 0.62 + nod + breathe * 0.2];
+  q.head.setAttribute('cx', f(hc[0])); q.head.setAttribute('cy', f(hc[1]));
+  q.head.setAttribute('fill', p.kind === 'doctor' ? furC : furC); q.ears.setAttribute('fill', furC); q.muzzle.setAttribute('fill', muzC); q.earIn.setAttribute('fill', inC);
+  const [x, y] = hc;
+  const X = (a        ) => f(x + a * R), Y = (a        ) => f(y + a * R);
+  const leaf = (bx        , by        , tx        , ty        , w        ) => { const mx = (bx + tx) / 2, my = (by + ty) / 2, dx = ty - by, dy = -(tx - bx), l = Math.hypot(dx, dy) || 1; return `M${X(bx)} ${Y(by)} Q${X(mx + (dx / l) * w)} ${Y(my + (dy / l) * w)} ${X(tx)} ${Y(ty)} Q${X(mx - (dx / l) * w)} ${Y(my - (dy / l) * w)} ${X(bx)} ${Y(by)}Z`; };
+  const triE = (a     , b2     , c     ) => `M${X(a[0])} ${Y(a[1])} L${X(b2[0])} ${Y(b2[1])} L${X(c[0])} ${Y(c[1])}Z`;
+  const flop = Math.sin(t * 1.3 + p.st.v) * 0.06 - go * 0.1;
+  const whisk = (sx        , sy        ) => `M${X(sx)} ${Y(sy)} l${f(R * 0.6)} ${f(-R * 0.1)} M${X(sx)} ${Y(sy + 0.08)} l${f(R * 0.65)} ${f(R * 0.06)} M${X(sx)} ${Y(sy + 0.16)} l${f(R * 0.55)} ${f(R * 0.22)}`;
+  let ears = '', earIn = '', muzzle = '', nose = '', detail = '', dark = '';
+  let eyeX = 0.36, eyeY = -0.08, cheek = true;
+  switch (p.kind) {
+    case 'rabbit':
+      ears = leaf(-0.35, -0.7, -0.62 + flop, -2.2, 0.3) + ' ' + leaf(0.1, -0.82, 0.32 + flop, -2.1, 0.28);
+      earIn = leaf(-0.38, -0.95, -0.58 + flop, -2.0, 0.12) + ' ' + leaf(0.12, -1.05, 0.3 + flop, -1.9, 0.11);
+      muzzle = ell(x + 0.66 * R, y + 0.3 * R, 0.26 * R, 0.2 * R);
+      nose = `M${X(0.82)} ${Y(0.1)} l${f(0.16 * R)} 0 l${f(-0.08 * R)} ${f(0.12 * R)}Z`;
+      detail = `M${X(0.9)} ${Y(0.22)} q${f(-0.06 * R)} ${f(0.14 * R)} ${f(-0.18 * R)} ${f(0.1 * R)} ` + whisk(0.86, 0.26);
+      break;
+    case 'cat':
+      ears = triE([-0.78, -0.45], [-0.55, -1.4], [-0.1, -0.88]) + ' ' + triE([0.08, -0.92], [0.48, -1.38], [0.76, -0.52]);
+      earIn = triE([-0.62, -0.64], [-0.52, -1.18], [-0.27, -0.86]) + ' ' + triE([0.22, -0.9], [0.46, -1.16], [0.6, -0.64]);
+      muzzle = ell(x + 0.6 * R, y + 0.3 * R, 0.28 * R, 0.2 * R);
+      nose = `M${X(0.82)} ${Y(0.12)} l${f(0.15 * R)} 0 l${f(-0.075 * R)} ${f(0.11 * R)}Z`;
+      detail = whisk(0.78, 0.28) + ` M${X(-0.15)} ${Y(-0.85)} l0 ${f(0.22 * R)} M${X(0.05)} ${Y(-0.9)} l0 ${f(0.25 * R)} M${X(0.25)} ${Y(-0.85)} l0 ${f(0.2 * R)}`;
+      break;
+    case 'fox':
+      ears = triE([-0.78, -0.45], [-0.6, -1.7], [-0.06, -0.88]) + ' ' + triE([0.1, -0.92], [0.5, -1.66], [0.8, -0.48]);
+      earIn = triE([-0.68, -1.2], [-0.6, -1.7], [-0.38, -1.25]) + ' ' + triE([0.36, -1.22], [0.5, -1.66], [0.62, -1.2]);
+      muzzle = `M${X(0.12)} ${Y(0.0)} Q${X(0.85)} ${Y(0.06)} ${X(1.3)} ${Y(0.3)} Q${X(0.9)} ${Y(0.72)} ${X(0.02)} ${Y(0.62)} Q${X(-0.1)} ${Y(0.3)} ${X(0.12)} ${Y(0.0)}Z`;
+      nose = ell(x + 1.28 * R, y + 0.3 * R, 0.11 * R, 0.09 * R);
+      detail = `M${X(1.15)} ${Y(0.42)} q${f(-0.25 * R)} ${f(0.1 * R)} ${f(-0.45 * R)} 0`;
+      break;
+    case 'squirrel':
+      ears = leaf(-0.48, -0.68, -0.6, -1.45, 0.26) + ' ' + leaf(0.12, -0.86, 0.15, -1.55, 0.25);
+      earIn = leaf(-0.48, -0.82, -0.58, -1.3, 0.11) + ' ' + leaf(0.12, -1.0, 0.14, -1.4, 0.1);
+      muzzle = ell(x + 0.6 * R, y + 0.3 * R, 0.34 * R, 0.27 * R);
+      nose = ell(x + 0.9 * R, y + 0.14 * R, 0.09 * R, 0.07 * R);
+      detail = `M${X(-0.6)} ${Y(-1.45)} l${f(-0.12 * R)} ${f(-0.25 * R)} M${X(-0.6)} ${Y(-1.45)} l${f(0.08 * R)} ${f(-0.27 * R)} M${X(0.15)} ${Y(-1.55)} l${f(-0.08 * R)} ${f(-0.27 * R)} M${X(0.15)} ${Y(-1.55)} l${f(0.12 * R)} ${f(-0.25 * R)} M${X(0.74)} ${Y(0.54)} l0 ${f(0.13 * R)} l${f(0.1 * R)} 0 l0 ${f(-0.13 * R)}`;
+      break;
+    case 'deer':
+      ears = leaf(-0.3, -0.6, -1.35, -0.92, 0.25) + ' ' + leaf(0.15, -0.8, 0.85, -1.3, 0.22);
+      earIn = leaf(-0.42, -0.67, -1.18, -0.9, 0.1) + ' ' + leaf(0.24, -0.87, 0.76, -1.2, 0.09);
+      muzzle = `M${X(0.22)} ${Y(-0.18)} Q${X(1.05)} ${Y(-0.1)} ${X(1.3)} ${Y(0.33)} Q${X(1.1)} ${Y(0.74)} ${X(0.18)} ${Y(0.58)} Q${X(0.0)} ${Y(0.2)} ${X(0.22)} ${Y(-0.18)}Z`;
+      nose = ell(x + 1.26 * R, y + 0.28 * R, 0.12 * R, 0.1 * R);
+      detail = `M${X(-0.12)} ${Y(-0.9)} L${X(-0.3)} ${Y(-1.65)} L${X(-0.7)} ${Y(-2.05)} M${X(-0.3)} ${Y(-1.65)} L${X(-0.05)} ${Y(-2.15)} M${X(-0.26)} ${Y(-1.32)} L${X(-0.68)} ${Y(-1.5)} M${X(0.2)} ${Y(-0.95)} L${X(0.32)} ${Y(-1.65)} L${X(0.1)} ${Y(-2.1)} M${X(0.32)} ${Y(-1.65)} L${X(0.7)} ${Y(-2.0)} M${X(0.28)} ${Y(-1.32)} L${X(0.62)} ${Y(-1.4)}`;
+      break;
+    case 'otter':
+      ears = ell(x - 0.72 * R, y - 0.52 * R, 0.2 * R, 0.18 * R) + ' ' + ell(x + 0.3 * R, y - 0.84 * R, 0.18 * R, 0.16 * R);
+      muzzle = ell(x + 0.56 * R, y + 0.3 * R, 0.48 * R, 0.33 * R);
+      nose = ell(x + 0.9 * R, y + 0.1 * R, 0.17 * R, 0.11 * R);
+      detail = whisk(0.78, 0.3) + ` M${X(0.88)} ${Y(0.22)} l0 ${f(0.15 * R)}`;
+      eyeY = -0.16;
+      break;
+    case 'raccoon':
+      ears = ell(x - 0.6 * R, y - 0.72 * R, 0.3 * R, 0.28 * R) + ' ' + ell(x + 0.28 * R, y - 0.88 * R, 0.28 * R, 0.26 * R);
+      earIn = ell(x - 0.6 * R, y - 0.72 * R, 0.15 * R, 0.14 * R) + ' ' + ell(x + 0.28 * R, y - 0.88 * R, 0.14 * R, 0.13 * R);
+      dark = `M${X(-0.18)} ${Y(-0.3)} Q${X(0.42)} ${Y(-0.52)} ${X(0.9)} ${Y(-0.16)} Q${X(0.56)} ${Y(0.22)} ${X(-0.06)} ${Y(0.16)}Z`;
+      muzzle = ell(x + 0.7 * R, y + 0.32 * R, 0.34 * R, 0.22 * R);
+      nose = ell(x + 1.02 * R, y + 0.24 * R, 0.1 * R, 0.085 * R);
+      cheek = false;
+      break;
+    case 'bear':
+      ears = ell(x - 0.56 * R, y - 0.74 * R, 0.3 * R, 0.28 * R) + ' ' + ell(x + 0.3 * R, y - 0.88 * R, 0.28 * R, 0.26 * R);
+      earIn = ell(x - 0.56 * R, y - 0.74 * R, 0.15 * R, 0.14 * R) + ' ' + ell(x + 0.3 * R, y - 0.88 * R, 0.14 * R, 0.13 * R);
+      muzzle = ell(x + 0.62 * R, y + 0.3 * R, 0.36 * R, 0.27 * R);
+      nose = ell(x + 0.92 * R, y + 0.15 * R, 0.13 * R, 0.1 * R);
+      detail = `M${X(0.9)} ${Y(0.25)} l0 ${f(0.13 * R)} M${X(0.68)} ${Y(0.46)} q${f(0.1 * R)} ${f(0.08 * R)} ${f(0.22 * R)} 0`;
+      break;
+    case 'doctor': {
+      const s = R / 4.6;
+      let d = `M${f(x - 4.4 * s)} ${f(y + 0.4 * s)}`;
+      for (let i = 0; i <= 7; i++) { const a = Math.PI * (1.02 + (i / 7) * 1.0); d += ` Q${f(x + 5.6 * s * Math.cos(a - 0.12))} ${f(y - 0.6 * s + 5.6 * s * Math.sin(a - 0.12))} ${f(x + 4.7 * s * Math.cos(a))} ${f(y - 0.6 * s + 4.7 * s * Math.sin(a))}`; }
+      dark = d + ` L${f(x + 1.6 * s)} ${f(y - 2.6 * s)} L${f(x - 2.4 * s)} ${f(y + 1.4 * s)}Z`;
+      detail = `M${f(x + 1.4 * s)} ${f(y - 0.2 * s)} a${f(1.4 * s)} ${f(1.4 * s)} 0 1 0 ${f(2.8 * s)} 0 a${f(1.4 * s)} ${f(1.4 * s)} 0 1 0 ${f(-2.8 * s)} 0 M${f(x + 1.4 * s)} ${f(y - 0.2 * s)} L${f(x - 2 * s)} ${f(y - 0.8 * s)} M${f(x + 2.6 * s)} ${f(y + 2.2 * s)} q${f(0.6 * s)} ${f(0.5 * s)} ${f(1.2 * s)} 0`;
+      eyeX = 0.44; eyeY = -0.04;
+      break;
+    }
+  }
+  q.ears.setAttribute('d', ears); q.earIn.setAttribute('d', earIn); q.muzzle.setAttribute('d', muzzle); q.nose.setAttribute('d', nose);
+  q.detail.setAttribute('d', detail); q.dark.setAttribute('d', dark);
+  const blink = (t + p.st.u * 0.01) % 3.7 < 0.12, ex = x + eyeX * R, ey = y + eyeY * R, er = R * 0.11;
+  q.eye.setAttribute('d', blink ? `M${f(ex - er)} ${f(ey)} l${f(2 * er)} 0 l0 0.5 l${f(-2 * er)} 0Z` : ell(ex, ey, er, er * 1.15) + (p.kind === 'raccoon' ? '' : ` M${f(ex + er * 0.2)} ${f(ey - er * 0.45)} l0.01 0`));
+  q.eye.setAttribute('fill', p.kind === 'raccoon' && !blink ? 'var(--paper)' : 'currentColor');
+  q.cheek.setAttribute('d', cheek ? ell(x + 0.3 * R, y + 0.35 * R, 0.14 * R, 0.09 * R) : '');
+  // 팔: 짧고 통통, 걸을 땐 다리 반대로, 앉으면 책상 위 자판
+  const legSwing = (fA.ankle[0] - 40) / (p.walk.stride / 2);
+  const fa = (p.arms[0].step(-legSwing * 30 * go, dt) * Math.PI) / 180, na = (p.arms[1].step(legSwing * 30 * go, dt) * Math.PI) / 180;
+  const shF      = [bc[0] - 2, bc[1] - ryT + 4], shN      = [bc[0] + 2.4, bc[1] - ryT + 4.6];
+  const tapF = typing ? Math.max(0, Math.sin(t * 11 + p.st.u)) * 1.2 : 0, tapN = typing ? Math.max(0, Math.sin(t * 13 + 2 + p.st.v)) * 1.2 : 0;
+  const deskK = p.atDesk ? k : 0, lapK = k - deskK;
+  const armAt = (s     , ang        , tap        , near         )             => {
+    const walkE      = [s[0] + 5 * Math.sin(ang + 0.15), s[1] + 5 * Math.cos(ang + 0.15)], walkH      = [walkE[0] + 5 * Math.sin(ang + 0.45), walkE[1] + 5 * Math.cos(ang + 0.45)];
+    const deskE      = [s[0] + (near ? 6 : 5), s[1] + 3], deskH      = [s[0] + (near ? 12 : 11), s[1] + 2.5 - tap];
+    const lapE      = [s[0] + 4, s[1] + 5], lapH      = [s[0] + 8, s[1] + 8];
+    return [[walkE[0] * (1 - k) + deskE[0] * deskK + lapE[0] * lapK, walkE[1] * (1 - k) + deskE[1] * deskK + lapE[1] * lapK], [walkH[0] * (1 - k) + deskH[0] * deskK + lapH[0] * lapK, walkH[1] * (1 - k) + deskH[1] * deskK + lapH[1] * lapK]];
+  };
+  const [eF, hF] = armAt(shF, fa, tapF, false); q.farArm.draw([shF, eF, hF], [0.2, 0.4]);
+  q.farHand.setAttribute('d', ell(hF[0], hF[1], 2.3, 2.1));
+  let [eN, hN] = armAt(shN, na, tapN, true);
+  if (wave > 0.01) { const wv = selfie ? 0 : Math.sin(Math.max(0, p.waveT) * 12) * 2.2; eN = lp(eN, [shN[0] + 4, shN[1] - 4], wave); hN = lp(hN, [shN[0] + 5 + wv, shN[1] - 10], wave); }
+  q.nearArm.draw([shN, eN, hN], [0.2, 0.4]);
+  q.nearHand.setAttribute('d', ell(hN[0], hN[1], 2.3, 2.1));
+  isoPlace(p.g, p.u, p.v, p.face, S2);
+}
+
+// ---------- 일정과 이동
+const faceFor = (a     , b     )         => b[0] > a[0] + 0.01 ? '+u' : b[0] < a[0] - 0.01 ? '-u' : b[1] > a[1] ? '+v' : '-v';
+function goTo(p        , path       , after                 ) { p.path = path; p.after = after; p.pose = p.sitK > 0 ? 'standup' : 'walk'; }
+function updatePerson(p        , lt        , dt        ) {
+  const app = APP.get(p.st) , a0 = app[0], seat      = [p.st.u, p.st.v];
+  const toSeat = app.slice(1), fromSeat = [...app].reverse();
+  switch (p.pose) {
+    case 'off':
+      if (lt >= p.inAt && lt < p.outAt) { p.u = ENTRY[0]; p.v = ENTRY[1]; p.g.style.display = ''; p.atDesk = false; goTo(p, [...route(ENTRY, a0), ...toSeat, seat], 'sit'); }
+      break;
+    case 'walk': {
+      const tgt = p.path[0];
+      if (!tgt) { p.pose = 'off'; break; }
+      p.face = faceFor([p.u, p.v], tgt);
+      const step = (p.walk.speed * S2 / KX) * dt;
+      const du = tgt[0] - p.u, dv = tgt[1] - p.v, d = Math.abs(du) + Math.abs(dv);
+      if (d <= step) {
+        p.u = tgt[0]; p.v = tgt[1]; p.path.shift();
+        if (!p.path.length) {
+          if (p.after === 'leave') { p.pose = 'off'; p.g.style.display = 'none'; }
+          else if (p.after === 'sit') { p.pose = 'sitdown'; p.face = p.spot ? (p.spot.face ?? '+v') : p.st.face; p.atDesk = !p.spot; }
+          else { p.pose = 'stand'; p.face = '-v'; p.timer = 0; }
+        }
+      } else if (Math.abs(du) > 0.01) p.u += Math.sign(du) * Math.min(step, Math.abs(du)); else p.v += Math.sign(dv) * Math.min(step, Math.abs(dv));
+      break;
+    }
+    case 'sitdown': p.sitK = Math.min(1, p.sitK + dt / 0.7); if (p.sitK >= 1) { p.pose = 'sit'; p.timer = 0; } break;
+    case 'standup': p.sitK = Math.max(0, p.sitK - dt / 0.6); if (p.sitK <= 0) p.pose = 'walk'; break;
+    case 'sit': case 'stand':
+      p.timer += dt;
+      if (p.spot) {
+        if (p.timer > p.spot.dur) { const s = p.spot; s.busy = null; p.spot = null; goTo(p, [...[...(s.via ?? [])].reverse(), s.app, ...route(s.app, a0), ...toSeat, seat], 'sit'); }
+      } else if (lt >= p.outAt) { p.atDesk = false; goTo(p, [...fromSeat, ...route(a0, ENTRY)], 'leave'); }
+      break;
+  }
+  p.key = p.u + p.v + (p.pose === 'sit' && p.atDesk ? 0 : 2);
+}
+let nextErrand = 30;
+function errands(lt        ) {
+  if (lt < 26 || lt > 60 || lt < nextErrand) return;
+  nextErrand = lt + 4 + Math.random() * 4;
+  const free = SPOTS.filter((s) => !s.busy); if (!free.length) return;
+  const who = staff.filter((p) => p.pose === 'sit' && p.atDesk && p.timer > 6 && lt < p.outAt - 12);
+  if (!who.length) return;
+  const p = who[Math.floor(Math.random() * who.length)], s = free[Math.floor(Math.random() * free.length)];
+  s.busy = p; p.spot = s; p.atDesk = false;
+  const app = APP.get(p.st) ;
+  goTo(p, [...[...app].reverse(), ...route(app[0], s.app), ...(s.via ?? []), s.at], s.kind === 'sit' ? 'sit' : 'stand');
+}
+
+// ---------- 부엉이(총괄)와 아기들
+const OWL_DOC = P(60, 392, 26), OWL_CHIEF = P(240, 330, 24);
+const stool = item(60 + 392 - 4); box(stool, 52, 384, 68, 400, 0, 26, '#c79a63', 1);
+const owlG = item(0); owlG.style.cursor = 'pointer'; el('title', {}, owlG).textContent = '총괄 부엉이 (Aside)';
+const ow = { body: paint(owlG, '#8a6f52'), scarf: paint(owlG, '#c8323f', 0.8), belly: shape(owlG, 0.7), wing: pen(owlG, 0.9), head: paint(owlG, '#8a6f52'), tufts: pen(owlG, 1), eyes: [0, 1].map(() => el('ellipse', { rx: 2.6, ry: 2.6, fill: PAPER, stroke: 'currentColor', 'stroke-width': 0.9 }, owlG)), pupils: [blot(owlG), blot(owlG)], beak: tint(paint(owlG, '#e3a33a', 0.6), '#e3a33a'), feet: pen(owlG, 1) };
+const owl = { at: 'chief'                           , from: OWL_CHIEF, to: OWL_CHIEF, ft: 0, pos: OWL_CHIEF       , hop: -1 };
+owlG.addEventListener('pointerdown', () => { if (owl.hop < 0) owl.hop = 0; });
+function drawOwl(t        , dt        , Pl         ) {
+  if (owl.at === 'fly') { owl.ft += dt / 1.6; const u = ease(Math.min(1, owl.ft)); owl.pos = [lerp(owl.from[0], owl.to[0], u), lerp(owl.from[1], owl.to[1], u) - Math.sin(Math.PI * u) * 50]; if (owl.ft >= 1) owl.at = owl.to === OWL_DOC ? 'doc' : 'chief'; }
+  else owl.pos = owl.at === 'doc' ? OWL_DOC : OWL_CHIEF;
+  if (owl.hop >= 0) { owl.hop += dt; if (owl.hop > 1.2) owl.hop = -1; }
+  const hop = owl.hop > 0 && owl.hop < 0.7 ? Math.sin(Math.PI * owl.hop / 0.7) * 8 : 0;
+  const c      = [owl.pos[0], owl.pos[1] - 14 - hop], s = 0.95;
+  const working = owl.at === 'chief' && !nightIdle;
+  const look = owl.at === 'fly' ? 1 : Math.sin(t * 0.4) > 0.6 ? -2.2 : working ? 1.6 : 0.6;
+  const hcp      = [c[0] + look * 0.3, c[1] - 17 * s];
+  ow.body.setAttribute('fill', nightTint('#8a6f52', Pl)); ow.head.setAttribute('fill', nightTint('#8a6f52', Pl)); ow.scarf.setAttribute('fill', nightTint('#c8323f', Pl));
+  ow.body.setAttribute('d', `M${f(c[0] - 11 * s)} ${f(c[1])} Q${f(c[0] - 12 * s)} ${f(c[1] - 16 * s)} ${f(c[0])} ${f(c[1] - 16 * s)} Q${f(c[0] + 12 * s)} ${f(c[1] - 16 * s)} ${f(c[0] + 11 * s)} ${f(c[1])} Q${f(c[0])} ${f(c[1] + 16 * s)} ${f(c[0] - 11 * s)} ${f(c[1])}Z`);
+  ow.belly.setAttribute('d', `M${f(c[0] - 6 * s)} ${f(c[1] - 6 * s)} Q${f(c[0])} ${f(c[1] - 9 * s)} ${f(c[0] + 6 * s)} ${f(c[1] - 6 * s)} Q${f(c[0] + 7 * s)} ${f(c[1] + 8 * s)} ${f(c[0])} ${f(c[1] + 12 * s)} Q${f(c[0] - 7 * s)} ${f(c[1] + 8 * s)} ${f(c[0] - 6 * s)} ${f(c[1] - 6 * s)}Z`);
+  const flapA = owl.at === 'fly' ? Math.sin(t * 22) * 9 : owl.hop > 0 ? Math.sin(owl.hop * 18) * 6 : working ? Math.max(0, Math.sin(t * 9)) * 2 : 0;
+  ow.wing.setAttribute('d', `M${f(c[0] - 9 * s)} ${f(c[1] - 10 * s)} Q${f(c[0] - 15 * s - flapA)} ${f(c[1] - flapA)} ${f(c[0] - 7 * s)} ${f(c[1] + 11 * s)} M${f(c[0] + 9 * s)} ${f(c[1] - 10 * s)} Q${f(c[0] + 15 * s + flapA)} ${f(c[1] - flapA)} ${f(c[0] + 7 * s)} ${f(c[1] + 11 * s)}`);
+  ow.head.setAttribute('d', `M${f(hcp[0] - 10 * s)} ${f(hcp[1])} Q${f(hcp[0] - 10 * s)} ${f(hcp[1] - 9 * s)} ${f(hcp[0])} ${f(hcp[1] - 9 * s)} Q${f(hcp[0] + 10 * s)} ${f(hcp[1] - 9 * s)} ${f(hcp[0] + 10 * s)} ${f(hcp[1])} Q${f(hcp[0])} ${f(hcp[1] + 9 * s)} ${f(hcp[0] - 10 * s)} ${f(hcp[1])}Z`);
+  ow.scarf.setAttribute('d', `M${f(c[0] - 9 * s)} ${f(c[1] - 12 * s)} Q${f(c[0])} ${f(c[1] - 7 * s)} ${f(c[0] + 9 * s)} ${f(c[1] - 12 * s)} L${f(c[0] + 9 * s)} ${f(c[1] - 8 * s)} Q${f(c[0])} ${f(c[1] - 3 * s)} ${f(c[0] - 9 * s)} ${f(c[1] - 8 * s)}Z M${f(c[0] + 4 * s)} ${f(c[1] - 8 * s)} l2 9 l3 -1 l-1 -8Z`);
+  ow.tufts.setAttribute('d', `M${f(hcp[0] - 6 * s)} ${f(hcp[1] - 7 * s)} L${f(hcp[0] - 9 * s)} ${f(hcp[1] - 13 * s)} M${f(hcp[0] + 6 * s)} ${f(hcp[1] - 7 * s)} L${f(hcp[0] + 9 * s)} ${f(hcp[1] - 13 * s)}`);
+  const sleepy = nightIdle && owl.at === 'chief' ? 0.15 : (t % 4.3) < 0.12 ? 0.2 : 1;
+  ow.eyes.forEach((e, i) => { e.setAttribute('cx', f(hcp[0] + (i ? 4 : -4) * s + look * 0.6)); e.setAttribute('cy', f(hcp[1] - s)); e.setAttribute('ry', f(2.8 * sleepy)); e.setAttribute('rx', '2.8'); });
+  ow.pupils.forEach((pp, i) => { const ex = hcp[0] + (i ? 4 : -4) * s + look; pp.setAttribute('d', sleepy < 1 ? '' : `M${f(ex - 1)} ${f(hcp[1] - s)} a1 1 0 1 0 2 0 a1 1 0 1 0 -2 0`); });
+  ow.beak.setAttribute('d', `M${f(hcp[0] - 1.3 + look * 0.5)} ${f(hcp[1] + 2)} l2.6 0 l-1.3 3Z`);
+  ow.feet.setAttribute('d', owl.at === 'fly' ? '' : `M${f(c[0] - 3)} ${f(c[1] + 13)} l-1 3 M${f(c[0] + 3)} ${f(c[1] + 13)} l1 3`);
+}
+let nightIdle = false;
+
+// 아기 부엉이 (낮에 날아다님): 동그란 몸, 큰 눈, 작은 부리, 색 드레스
+const babyOwls = ['#b9a3d9', '#9cc7e0', '#f0d57a'].map((col, i) => {
+  const g = el('g', {}, air); g.style.display = 'none';
+  const wings = paint(g, '#a88c6c', 0.9);
+  const body = paint(g, '#a88c6c', 1);
+  const dress = paint(g, col, 0.8);
+  const face = shape(g, 0.7);
+  const eyes = [0, 1].map(() => el('circle', { r: 2.3, fill: PAPER, stroke: 'currentColor', 'stroke-width': 0.8 }, g));
+  const pupils = blot(g), beak = tint(paint(g, '#e3a33a', 0.5), '#e3a33a'), feet = pen(g, 0.8), tuft = pen(g, 0.8);
+  return { g, col, wings, body, dress, face, eyes, pupils, beak, feet, tuft, phase: i * 2.1, t: -1 };
+});
+function drawBabyOwls(lt        , dt        , t        , Pl         ) {
+  const active = lt > 28 && lt < 68 && owl.at === 'doc';
+  babyOwls.forEach((b, i) => {
+    const start = 28 + i * 3;
+    if (active && lt > start) { b.t = Math.min(1, b.t < 0 ? 0 : b.t + dt / 1.5); } else if (b.t >= 0) { b.t -= dt / 1.5; if (b.t <= 0) b.t = -1; }
+    b.g.style.display = b.t < 0 ? 'none' : '';
+    if (b.t < 0) return;
+    const w = t * 0.45 + b.phase;
+    const orbit      = [330 + Math.cos(w) * 150 + Math.sin(w * 2.3) * 20, 250 + Math.sin(w * 2) * 40 + Math.sin(w * 3.1) * 8];
+    const home      = [owl.pos[0] + (i - 1) * 12, owl.pos[1] - 36];
+    const u = ease(b.t); const c      = [lerp(home[0], orbit[0], u), lerp(home[1], orbit[1], u) + Math.sin(t * 7 + i) * 1.2];
+    const look = -Math.sin(w) >= 0 ? 1 : -1;
+    const fl = Math.sin(t * 18 + i) * (0.4 + 0.6 * u);
+    b.g.setAttribute('transform', `translate(${f(c[0])} ${f(c[1])}) scale(1.25)`);
+    const furC = nightTint('#a88c6c', Pl);
+    b.body.setAttribute('fill', furC); b.wings.setAttribute('fill', furC); b.dress.setAttribute('fill', nightTint(b.col, Pl));
+    b.body.setAttribute('d', 'M-6 1 Q-7 -9 0 -10 Q7 -9 6 1 Q5 7 0 7 Q-5 7 -6 1Z');
+    b.face.setAttribute('d', 'M-5 -4 Q-5 -8.5 0 -8.5 Q5 -8.5 5 -4 Q5 -0.5 0 -0.8 Q-5 -0.5 -5 -4Z');
+    b.tuft.setAttribute('d', 'M-4 -9 l-1.4 -2.4 M4 -9 l1.4 -2.4');
+    b.eyes.forEach((e, k) => { e.setAttribute('cx', f((k ? 2.4 : -2.4) + look * 0.3)); e.setAttribute('cy', '-4.6'); });
+    b.pupils.setAttribute('d', [-2.4, 2.4].map((ex) => `M${f(ex + look * 0.9 - 0.9)} -4.6 a0.9 0.9 0 1 0 1.8 0 a0.9 0.9 0 1 0 -1.8 0`).join(' '));
+    b.beak.setAttribute('d', `M${f(look * 0.4 - 1)} -2.4 L${f(look * 0.4 + 1)} -2.4 L${f(look * 0.4)} -0.6Z`);
+    b.dress.setAttribute('d', 'M-5.6 1.4 L5.6 1.4 L7.6 7.6 Q0 10 -7.6 7.6Z');
+    const wy = -2 - fl * 5;
+    b.wings.setAttribute('d', `M-5 -3 Q-11 ${f(wy - 2)} -13 ${f(wy + 2)} Q-9 ${f(wy + 4)} -5 2Z M5 -3 Q11 ${f(wy - 2)} 13 ${f(wy + 2)} Q9 ${f(wy + 4)} 5 2Z`);
+    b.feet.setAttribute('d', 'M-2 9 l-0.6 2 M2 9 l0.6 2');
+  });
+}
+// 아기 토끼 (토끼 책상 → 트리 앞 경주, 깡충깡충)
+const BUN_PATH        = [[268, 450], [300, 450], [300, 380], [330, 380], [330, 120], [272, 120]];
+const bunLen = BUN_PATH.slice(1).reduce((s, p, i) => s + Math.abs(p[0] - BUN_PATH[i][0]) + Math.abs(p[1] - BUN_PATH[i][1]), 0);
+const bunAt = (s        )      => { for (let i = 1; i < BUN_PATH.length; i++) { const a = BUN_PATH[i - 1], b = BUN_PATH[i], l = Math.abs(b[0] - a[0]) + Math.abs(b[1] - a[1]); if (s <= l) return [lerp(a[0], b[0], s / l), lerp(a[1], b[1], s / l)]; s -= l; } return BUN_PATH[BUN_PATH.length - 1]; };
+const bunnies = ['#9cc7e0', '#f0d57a', '#e39aa6', '#a6c98a'].map((col, i) => {
+  const g = item(0); g.style.display = 'none';
+  const shadow = el('ellipse', { rx: 6, ry: 1.8, fill: 'currentColor', opacity: 0.18 }, g);
+  const tail = shape(g, 0.8), body = shape(g, 0.9), foot = shape(g, 0.8), ears = shape(g, 0.8), earIn = tint(paint(g, '#eea6b2', 0.3), '#eea6b2'), head = shape(g, 0.9);
+  const scarf = paint(g, col, 0.6), eye = blot(g), nose = tint(paint(g, '#eea6b2', 0.3), '#eea6b2');
+  return { g, col, shadow, tail, body, foot, ears, earIn, head, scarf, eye, nose, sp: 0.85 + i * 0.1 + Math.random() * 0.08, start: 38 + i * 0.7, key: 0 };
+});
+function drawBunnies(lt        , Pl         ) {
+  const E = (cx        , cy        , rx        , ry        ) => `M${f(cx - rx)} ${f(cy)} a${f(rx)} ${f(ry)} 0 1 0 ${f(2 * rx)} 0 a${f(rx)} ${f(ry)} 0 1 0 ${f(-2 * rx)} 0Z`;
+  const leafP = (bx        , by        , tx        , ty        , w        ) => `M${f(bx - w)} ${f(by)} Q${f((bx + tx) / 2 - w * 1.5)} ${f((by + ty) / 2)} ${f(tx)} ${f(ty)} Q${f((bx + tx) / 2 + w * 1.5)} ${f((by + ty) / 2)} ${f(bx + w)} ${f(by)}Z`;
+  bunnies.forEach((b) => {
+    const T = lt - b.start, hopD = 0.3 / b.sp, hopL = 15;
+    const oneWay = (bunLen / hopL) * hopD, total = oneWay * 2 + 1.5;
+    if (T < 0 || T > total) { b.g.style.display = 'none'; return; }
+    b.g.style.display = '';
+    const back = T > oneWay + 1.5, tt = back ? T - oneWay - 1.5 : Math.min(T, oneWay);
+    const n = Math.floor(tt / hopD), fr = (tt % hopD) / hopD, resting = !back && T > oneWay;
+    let s = Math.min(bunLen, (n + (resting ? 0 : ease(fr))) * hopL); if (back) s = bunLen - s;
+    const wp = bunAt(Math.max(0, s)), ahead = bunAt(Math.max(0, Math.min(bunLen, s + (back ? -2 : 2))));
+    const g = P(wp[0], wp[1]), ga = P(ahead[0], ahead[1]);
+    const sdir = ga[0] >= g[0] ? 1 : -1, air = resting ? 0 : Math.sin(Math.PI * fr), hgt = air * 9;
+    const land = resting ? 0 : fr < 0.12 || fr > 0.88 ? 1 : 0;
+    const y = -hgt, rx = 6.2 + air * 1.2 - land * 0.4, ry = 4.8 - air * 0.6 + land * 0.3, tilt = resting ? 0 : (fr - 0.5) * 0.6;
+    b.g.setAttribute('transform', `translate(${f(g[0])} ${f(g[1])}) scale(${1.45 * sdir} 1.45)`);
+    b.shadow.setAttribute('rx', f(6 - air * 2));
+    b.tail.setAttribute('d', E(-7, y - 5.5 - tilt * 4, 2.1, 2));
+    b.body.setAttribute('d', E(-1, y - ry, rx, ry));
+    b.foot.setAttribute('d', air > 0.3 ? `M-6 ${f(y - 1.6)} l-4 1.2 l0.4 1.2 l4 -0.8Z` : E(-2.5, y - 0.9, 3.2, 1.1));
+    const hx = 5 + air, hy = y - 9 + tilt * 3, ea = air > 0.3 ? -2.5 : resting ? Math.sin(lt * 3) * 0.6 : 0;
+    b.ears.setAttribute('d', leafP(hx - 1, hy - 3, hx - 2.4 + ea, hy - 12, 1.2) + ' ' + leafP(hx + 1, hy - 3.2, hx + 1.4 + ea, hy - 11.4, 1.1));
+    b.earIn.setAttribute('d', leafP(hx - 1.1, hy - 4.5, hx - 2.2 + ea, hy - 10.6, 0.45) + ' ' + leafP(hx + 1, hy - 4.6, hx + 1.3 + ea, hy - 10.2, 0.4));
+    b.head.setAttribute('d', E(hx, hy, 3.9, 3.6));
+    b.scarf.setAttribute('fill', nightTint(b.col, Pl));
+    b.scarf.setAttribute('d', `M${f(hx - 3.6)} ${f(hy + 2.4)} Q${f(hx - 1)} ${f(hy + 4.6)} ${f(hx + 2.2)} ${f(hy + 3.2)} L${f(hx + 1.8)} ${f(hy + 5)} Q${f(hx - 1)} ${f(hy + 6.2)} ${f(hx - 3.8)} ${f(hy + 4)}Z`);
+    b.eye.setAttribute('d', E(hx + 1.6, hy - 0.6, 0.75, 0.85));
+    b.nose.setAttribute('d', E(hx + 3.7, hy + 0.6, 0.7, 0.55));
+    b.key = wp[0] + wp[1] + 1;
+    const it = items.find((i) => i.g === b.g) ; it.key = b.key;
+  });
+}
+
+// ---------- 앞 난간과 가랜드 꼬마전구
+const railY = 512;
+colour(frontG, '#c99a62', 1).setAttribute('d', `M-10 ${railY} L970 ${railY} L970 ${railY + 7} L-10 ${railY + 7}Z`);
+pen(frontG, 1.2).setAttribute('d', Array.from({ length: 25 }, (_, i) => `M${i * 40 + 6} ${railY + 7} L${i * 40 + 6} 545`).join(' '));
+garland([-10, railY - 2], [970, railY - 2], 60, frontG);
+const fairy = Array.from({ length: 40 }, (_, i) => ({ x: 6 + i * 24.4, y: railY + 4 + (i % 2) * 3, c: tint(el('circle', { cx: f(6 + i * 24.4), cy: f(railY + 4 + (i % 2) * 3), r: 1.8, stroke: 'currentColor', 'stroke-width': 0.4 }, frontG), ['#f2c14e', '#e8eef5', '#c8323f'][i % 3]) }));
+
+// ---------- 빛
+const glowC = (r        , col        ) => {
+  const id = 'g' + Math.random().toString(36).slice(2, 8); const rg = el('radialGradient', { id }, defs);
+  el('stop', { offset: 0, 'stop-color': col, 'stop-opacity': 0.85 }, rg); el('stop', { offset: 1, 'stop-color': col, 'stop-opacity': 0 }, rg);
+  return el('circle', { r, fill: `url(#${id})`, opacity: 0 }, glowG);
+};
+const desks = Object.values(ST);
+const lampGlow = desks.map(() => glowC(42, '#ffd38f')), scrGlow = desks.map(() => glowC(16, '#9fc4ff'));
+const loungeGlow = [glowC(40, '#ffd38f'), glowC(56, '#ffd38f')];
+const treeGlow = glowC(80, '#ffcf87'), ringGlow = glowC(40, '#fff6e0'), lhGlow = glowC(26, '#ffe2a0');
+const fairyGlow = fairy.filter((_, i) => i % 2 === 0).map(() => glowC(14, '#ffd38f'));
+const rays = el('g', { style: 'mix-blend-mode:screen;pointer-events:none', opacity: 0 }, svg);
+[0, 1, 2].forEach((i) => { const a = P(0, 340 + i * 140, 220), b = P(0, 400 + i * 140, 220), c = P(160, 400 + i * 140), d = P(160, 340 + i * 140); el('path', { d: poly([a, b, [c[0] + 60, c[1]], [d[0] + 60, d[1]]]), fill: '#fff2c8', opacity: 0.35 }, rays); });
+
+// ---------- 현황판 (위 가운데)
+const pill = el('g', {}, hud);
+const pillBg = el('rect', { x: 282, y: 8, width: 396, height: 26, rx: 13, fill: 'var(--paper)', stroke: 'currentColor', 'stroke-width': 1 }, pill);
+void pillBg;
+const pillT = el('text', { x: 480, y: 26, 'font-size': 13, 'text-anchor': 'middle', 'font-family': '"Noto Sans KR",sans-serif', fill: 'currentColor' }, pill);
+const hint = el('text', { x: W - 12, y: H - 8, 'font-size': 10, 'text-anchor': 'end', 'font-family': '"Noto Sans KR",sans-serif', fill: 'currentColor', opacity: 0.6, stroke: 'var(--paper)', 'stroke-width': 3, 'paint-order': 'stroke' }, hud);
+hint.textContent = '직원·부엉이를 누르면 인사해요 · 마우스로 바람';
+
+// ---------- 루프
+const wind = pointerWind(svg, 0.2);
+const qs = new URLSearchParams(location.search);
+const offset = qs.has('lt') ? Number(qs.get('lt')) : 0;
+let lastLT = -1;
+(window       ).__forest = { staff, owl, bunnies, babyOwls, P };
+
+run((t, dt) => {
+  const lt = (t + offset) % LOOP;
+  if (lt < lastLT) { staff.forEach((p) => { p.pose = 'off'; p.sitK = 0; p.spot = null; p.g.style.display = 'none'; }); SPOTS.forEach((s) => (s.busy = null)); nextErrand = 30; owl.at = 'chief'; }
+  lastLT = lt;
+  const tau = tauAt(lt), Pl = palette(tau);
+  applyPalette(svg, Pl);
+  gTop.setAttribute('stop-color', rgb(Pl.top)); gBot.setAttribute('stop-color', rgb(Pl.bottom));
+  for (const [e, c, a] of tinted) e.setAttribute(a, nightTint(c, Pl));
+  wind.step(t);
+
+  // 바다 창: 해, 달, 별, 물결, 배, 등대, 갈매기
+  const su = (tau - 0.25) / 0.5;
+  sun.setAttribute('cx', f(lerp(650, 1010, su))); sun.setAttribute('cy', f(HZ + 6 - Math.sin(Math.PI * clamp(su, 0, 1)) * 110)); sun.setAttribute('opacity', f(1 - Pl.night));
+  const mu = ((tau + 0.25) % 1) / 0.5, mx = lerp(650, 1010, mu), my = HZ + 6 - Math.sin(Math.PI * clamp(mu, 0, 1)) * 100;
+  moon.setAttribute('d', `M${f(mx)} ${f(my - 9)} A9 9 0 1 0 ${f(mx)} ${f(my + 9)} A12 12 0 0 1 ${f(mx)} ${f(my - 9)}Z`); moon.setAttribute('opacity', f(Pl.night));
+  stars.forEach((s, i) => s.setAttribute('opacity', f(Pl.night * (0.55 + 0.45 * Math.sin(t * (1.3 + i * 0.17) + i)))));
+  waves.forEach((w, i) => { const x = 600 + ((w.x - 600 + t * (4 + (i % 3))) % 480); w.p.setAttribute('d', `M${f(x)} ${f(w.y)} q${f(w.w / 4)} -2 ${f(w.w / 2)} 0 t${f(w.w / 2)} 0`); });
+  glitter.innerHTML = '';
+  const refl = Pl.sunset > 0.05 ? [lerp(650, 1010, su), '#ffd27a', Pl.sunset] : Pl.night > 0.3 ? [mx, '#f3e9c8', Pl.night * 0.7] : null;
+  if (refl) for (let i = 0; i < 8; i++) { const y = HZ + 6 + i * 9, w = 6 + i * 3 + Math.sin(t * 2 + i) * 2; el('path', { d: `M${f((refl[0]          ) - w)} ${f(y)} L${f((refl[0]          ) + w)} ${f(y)}`, stroke: refl[1]          , 'stroke-width': 1.6, opacity: f((refl[2]          ) * (1 - i / 9)) }, glitter); }
+  const bx = 600 + ((t * 6) % 520), by = HZ + 30 + Math.sin(t * 1.4) * 0.8;
+  boat.setAttribute('transform', `translate(${f(bx)} ${f(by)}) rotate(${f(Math.sin(t * 1.4) * 3)})`);
+  gulls.forEach((g, i) => { const gx = 640 + ((t * (10 + i * 3) + i * 140) % 440), gy = 40 + i * 18 + Math.sin(t + i) * 5, fl = Math.sin(t * 6 + i) * 2; g.setAttribute('d', `M${f(gx - 5)} ${f(gy - fl)} Q${f(gx - 2)} ${f(gy - 3)} ${f(gx)} ${f(gy)} Q${f(gx + 2)} ${f(gy - 3)} ${f(gx + 5)} ${f(gy - fl)}`); g.setAttribute('opacity', f(1 - Pl.night)); });
+  const lhOn = Pl.lamp > 0.4 ? (Math.sin(t * 2.2) > 0.2 ? 1 : 0.15) : 0;
+  lhLamp.setAttribute('opacity', f(0.3 + lhOn * 0.7)); lhGlow.setAttribute('cx', '985'); lhGlow.setAttribute('cy', '156'); lhGlow.setAttribute('opacity', f(lhOn * 0.8));
+  snow.forEach((set) => set.forEach((s, i) => { const y = (s.y0 + t * s.sp) % 390 - 10; s.c.setAttribute('cx', f(s.x + Math.sin(t * 0.8 + i) * 6 + wind.value * 8)); s.c.setAttribute('cy', f(y)); }));
+  rays.setAttribute('opacity', f((1 - Pl.night) * clamp((0.5 - tau) * 4, 0, 1) * 0.9));
+
+  // 시계·소식판
+  const hrs = ((tau * 24) % 12) / 12, mins = (tau * 24) % 1;
+  hHand.setAttribute('d', `M0 0 L${f(8 * Math.sin(hrs * 2 * Math.PI))} ${f(-8 * Math.cos(hrs * 2 * Math.PI))}`);
+  mHand.setAttribute('d', `M0 0 L${f(11 * Math.sin(mins * 2 * Math.PI))} ${f(-11 * Math.cos(mins * 2 * Math.PI))}`);
+  const hh = Math.floor(tau * 24), mm = Math.floor((tau * 24 * 60) % 60);
+  const clockTxt = `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+  const ampm = hh < 12 ? '오전' : '오후';
+  const kids = bunnies.filter((b) => b.g.style.display !== 'none').length + babyOwls.filter((b) => b.t >= 0).length;
+  chalkDate.textContent = '11. 12. (목)'; chalkKids.textContent = kids ? `${kids}마리 노는 중` : '쉬는 중'; chalkNow.textContent = ampm;
+  pillT.textContent = `동백숲한의원 숲속 사무실 · 동물 직원들의 하루 · ${clockTxt}`;
+
+  // 사람·부엉이·아기들
+  errands(lt);
+  staff.forEach((p) => { updatePerson(p, lt, dt); if (p.pose !== 'off') drawPerson(p, t, dt, Pl, wind.value); items.find((i) => i.g === p.g) .key = p.key; });
+  const doc = staff[0];
+  if (owl.at === 'chief' && doc.pose === 'sit' && doc.atDesk && lt < 70) { owl.at = 'fly'; owl.from = OWL_CHIEF; owl.to = OWL_DOC; owl.ft = 0; }
+  if (owl.at === 'doc' && lt > doc.outAt) { owl.at = 'fly'; owl.from = OWL_DOC; owl.to = OWL_CHIEF; owl.ft = 0; }
+  nightIdle = lt > 104 || lt < 3;
+  drawOwl(t, dt, Pl);
+  items.find((i) => i.g === owlG) .key = owl.at === 'fly' ? 2000 : owl.at === 'doc' ? 60 + 392 + 1 : 260 + 330 + 1;
+  drawBabyOwls(lt, dt, t, Pl);
+  drawBunnies(lt, Pl);
+  const order = [...items].sort((a, b) => a.key - b.key);
+  order.forEach((i) => world.appendChild(i.g));
+
+  // 화분 잎·차 김
+  plants.forEach((pl, j) => pl.leaves.forEach((lf, i) => {
+    const a = ((lf.a + lf.sp.step(wind.value * 10 + Math.sin(t * 0.7 + i + j) * 3, 0.016)) * Math.PI) / 180;
+    const b0 = pl.b, tip      = [b0[0] + lf.l * Math.sin(a), b0[1] - lf.l * Math.cos(a)];
+    const m      = [(b0[0] + tip[0]) / 2, (b0[1] + tip[1]) / 2], nx = -(tip[1] - b0[1]) / lf.l * 4, ny = (tip[0] - b0[0]) / lf.l * 4;
+    lf.p.setAttribute('d', `M${pt(b0)} Q${f(m[0] + nx)} ${f(m[1] + ny)} ${pt(tip)} Q${f(m[0] - nx)} ${f(m[1] - ny)} ${pt(b0)}Z`);
+    if (i < 2) { pl.flowers[i].setAttribute('cx', f(tip[0])); pl.flowers[i].setAttribute('cy', f(tip[1])); }
+  }));
+  const sp = P(TEA[0], TEA[1], 30);
+  steam.setAttribute('d', `M${f(sp[0])} ${f(sp[1])} q${f(3 + Math.sin(t * 2) * 2)} -5 0 -10 t${f(Math.sin(t * 2.4) * 2)} -9`);
+
+  // 빛: 스탠드·모니터는 사람이 앉아 있을 때, 트리·꼬마전구는 저녁부터
+  desks.forEach((d, i) => {
+    const sat = d === ST.chief ? owl.at === 'chief' && !nightIdle : staff.some((p) => p.st === d && p.atDesk && p.sitK > 0.6);
+    d.on = lerp(d.on, sat && Pl.lamp > 0.28 + i * 0.02 ? 1 : 0, 0.05);
+    lampGlow[i].setAttribute('cx', f(d.lamp[0])); lampGlow[i].setAttribute('cy', f(d.lamp[1] + 12)); lampGlow[i].setAttribute('opacity', f(d.on * 0.85));
+    scrGlow[i].setAttribute('cx', f(d.screen[0])); scrGlow[i].setAttribute('cy', f(d.screen[1])); scrGlow[i].setAttribute('opacity', f((sat ? 1 : 0) * Pl.lamp * 0.7));
+  });
+  const ev = clamp(Pl.lamp * 1.4, 0, 1);
+  treeLights.forEach((l, i) => l.c.setAttribute('opacity', f(0.6 + 0.4 * Math.sin(t * 2.3 + i * 1.7))));
+  [tableLamp, floorLamp].forEach((lp2, i) => { loungeGlow[i].setAttribute('cx', f(lp2[0])); loungeGlow[i].setAttribute('cy', f(lp2[1] + 10)); loungeGlow[i].setAttribute('opacity', f(ev * 0.75)); });
+  treeGlow.setAttribute('cx', f(treeB[0])); treeGlow.setAttribute('cy', f(treeB[1] - 95)); treeGlow.setAttribute('opacity', f(ev * 0.55));
+  fairyGlow.forEach((g, i) => { const fz = fairy[i * 2]; g.setAttribute('cx', f(fz.x)); g.setAttribute('cy', f(fz.y)); g.setAttribute('opacity', f(ev * (0.5 + 0.5 * Math.sin(t * 3 + i)))); });
+  const selfie = SPOTS[2].busy && SPOTS[2].busy.pose === 'stand';
+  ringGlow.setAttribute('cx', f(rl[0])); ringGlow.setAttribute('cy', f(rl[1])); ringGlow.setAttribute('opacity', f(selfie ? 0.6 + 0.4 * Math.max(0, Math.sin(t * 6)) : 0));
+});
+
+
+Object.assign(M, {  }); }
+})();
+  </script>
+</body>
+</html>
